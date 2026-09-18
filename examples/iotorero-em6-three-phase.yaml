@@ -1,0 +1,106 @@
+esphome:
+  name: iotorero-em6-three-phase
+  friendly_name: IoTorero EM6 Three Phase
+  name_add_mac_suffix: true
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+external_components:
+  - source: github://2taras/wl125_esphome@main
+    components: [bl0906_spi]
+
+spi:
+  id: bl0906_bus
+  clk_pin: GPIO4
+  mosi_pin: GPIO7
+  miso_pin: GPIO8
+  interface: hardware
+
+sensor:
+  - platform: bl0906_spi
+    id: meter
+    spi_id: bl0906_bus
+    cs_pin: GPIO5
+    select_pin: GPIO3
+    reset_pin: GPIO6
+    data_rate: 1MHz
+    spi_mode: MODE1
+    sample_rate: 1000Hz
+    update_interval: 1s
+    phase_offsets: [0, 120, -120, 0, 0, 0]
+    restore_energy: true
+
+    voltage:
+      name: Voltage L1 Reference
+    frequency:
+      name: Mains Frequency
+    total_power:
+      name: Corrected Total Power
+    total_energy:
+      name: Corrected Total Energy
+    actual_sample_rate:
+      name: Waveform Sample Rate
+      entity_category: diagnostic
+    spi_errors:
+      name: BL0906 SPI Errors
+      entity_category: diagnostic
+    raw_voltage_rms:
+      name: Raw Voltage RMS
+      entity_category: diagnostic
+
+    channel_1:
+      current: Grid L1 Current
+      power: Grid L1 Corrected Power
+      energy: Grid L1 Corrected Energy
+      raw_current_rms:
+        name: Grid L1 Raw Current RMS
+        entity_category: diagnostic
+      raw_power:
+        name: Grid L1 Raw Product
+        entity_category: diagnostic
+    channel_2:
+      current: Grid L2 Current
+      power: Grid L2 Corrected Power
+      energy: Grid L2 Corrected Energy
+      raw_current_rms:
+        name: Grid L2 Raw Current RMS
+        entity_category: diagnostic
+      raw_power:
+        name: Grid L2 Raw Product
+        entity_category: diagnostic
+    channel_3:
+      current: Grid L3 Current
+      power: Grid L3 Corrected Power
+      energy: Grid L3 Corrected Energy
+      raw_current_rms:
+        name: Grid L3 Raw Current RMS
+        entity_category: diagnostic
+      raw_power:
+        name: Grid L3 Raw Product
+        entity_category: diagnostic
+    channel_4:
+      current: Channel 4 Current
+      power: Channel 4 Corrected Power
+      energy: Channel 4 Corrected Energy
+    channel_5:
+      current: Channel 5 Current
+      power: Channel 5 Corrected Power
+      energy: Channel 5 Corrected Energy
+    channel_6:
+      current: Channel 6 Current
+      power: Channel 6 Corrected Power
+      energy: Channel 6 Corrected Energy

@@ -1,0 +1,63 @@
+esphome:
+  name: bl0906-spi-test
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [bl0906_spi]
+
+spi:
+  id: bl0906_bus
+  clk_pin: GPIO4
+  mosi_pin: GPIO7
+  miso_pin: GPIO8
+  interface: hardware
+
+sensor:
+  - platform: bl0906_spi
+    id: meter
+    spi_id: bl0906_bus
+    cs_pin: GPIO5
+    select_pin: GPIO3
+    reset_pin: GPIO6
+    phase_offsets: [0, 120, -120, 0, 0, 0]
+    voltage:
+      name: Voltage
+    frequency:
+      name: Frequency
+    total_power:
+      name: Total Power
+    total_energy:
+      name: Total Energy
+    actual_sample_rate:
+      name: Sample Rate
+    spi_errors:
+      name: SPI Errors
+    raw_voltage_rms:
+      name: Raw Voltage RMS
+    channel_1:
+      current: Channel 1 Current
+      power: Channel 1 Power
+      energy: Channel 1 Energy
+      raw_current_rms:
+        name: Channel 1 Raw Current RMS
+      raw_power:
+        name: Channel 1 Raw Power
+    channel_2:
+      power: Channel 2 Power
+    channel_3:
+      power: Channel 3 Power
+    channel_4:
+      power: Channel 4 Power
+    channel_5:
+      power: Channel 5 Power
+    channel_6:
+      power: Channel 6 Power

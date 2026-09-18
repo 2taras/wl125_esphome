@@ -1,5 +1,65 @@
-# wl125_esphome
-This implementation isn't safe and doesn't have crc check
+# ESPHome external components
+
+This repository contains ESPHome external components maintained by `2taras`.
+
+## BL0906 SPI waveform meter
+
+`bl0906_spi` is intended for six-channel BL0906 meters whose single voltage
+input is used with currents from different mains phases. It reads the signed
+`I1_WAVE..I6_WAVE` and `V_WAVE` registers over SPI and calculates power after
+shifting the voltage waveform independently for every channel. The default
+phase model is:
+
+```text
+channel 1:    0 degrees
+channel 2: +120 degrees
+channel 3: -120 degrees
+channel 4:    0 degrees
+channel 5:    0 degrees
+channel 6:    0 degrees
+```
+
+This keeps nonlinear current waveforms intact. It is more accurate than
+reconstructing power from RMS current and a single phase-angle register.
+
+### IoTorero/WTR01/EM6 wiring used by this configuration
+
+```text
+BL0906 pin 24 SEL     -> ESP32-C3 GPIO3
+BL0906 pin 14 SCLK    -> ESP32-C3 GPIO4
+BL0906 pin 11 /CS     -> ESP32-C3 GPIO5
+BL0906 pin  9 /RST    -> ESP32-C3 GPIO6
+BL0906 pin 13 SDI/RX  <- ESP32-C3 GPIO7 (MOSI)
+BL0906 pin 12 SDO/TX  -> ESP32-C3 GPIO8 (MISO)
+```
+
+The component drives `/RST` low, selects SPI with `SEL=1`, establishes
+`CS=1/SCLK=0`, then releases reset. BL0906 SPI is Mode 1, MSB-first, and is
+kept at 1 MHz (below the chip's documented 1.5 MHz maximum).
+
+See [`examples/iotorero-em6-three-phase.yaml`](examples/iotorero-em6-three-phase.yaml)
+for a complete configuration. To use it from GitHub:
+
+```yaml
+external_components:
+  - source: github://2taras/wl125_esphome@main
+    components: [bl0906_spi]
+```
+
+`phase_offsets` advances the sampled voltage waveform by the given angle. If
+L2/L3 power has the wrong sign, swap `+120` and `-120`; that depends on the
+actual phase order and CT direction. Corrected energy counts consumption only
+(negative/export power is not added) and is saved to flash every five minutes.
+
+The default voltage/current/power conversion coefficients are the same as the
+stock ESPHome BL0906 component for Athom/IoTorero EM6 hardware. Use the
+per-channel calibration options when comparing against a reference meter.
+
+## WL125
+
+The older WL125 component does not validate a CRC and must not be used for a
+safety-critical access-control decision.
+
 ```yaml
 external_components:
   - source:
