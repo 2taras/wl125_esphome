@@ -97,7 +97,11 @@ bool BL0906SPI::read_register_(uint8_t address, uint32_t &value) {
 
   const uint8_t checksum = static_cast<uint8_t>(~static_cast<uint8_t>(
       BL0906_SPI_READ + address + frame[2] + frame[3] + frame[4]));
-  if (checksum != frame[5]) {
+  // BL0906 releases MISO at the end of the 48th clock. With ESP32-C3 hardware
+  // SPI the checksum LSB is consequently read as the idle-high level on the
+  // tested production board. Validate the remaining seven checksum bits; all
+  // 24 data bits are sampled before that release point.
+  if ((checksum & 0xFEU) != (frame[5] & 0xFEU)) {
     this->spi_errors_++;
     this->consecutive_good_frames_ = 0;
     this->consecutive_bad_frames_++;
