@@ -57,10 +57,12 @@ active power. It can also publish total apparent power and total power factor.
 
 The optional `temperature` sensor reads the BL0906 internal temperature. The
 optional `waveform` block exposes a six-channel selector, an on-demand capture
-button and voltage/current/instantaneous-power text sensors. A capture contains
-the most recent complete positive-going voltage cycle as
-`period_ms|v1,v2,...`; 21 evenly spaced points keep every state below Home
-Assistant's 255-character limit. The endpoints are linearly interpolated zero
+button and voltage/current/instantaneous-power text sensors. Up to five real,
+consecutive positive-going voltage cycles are captured from a 160-sample ring.
+Each cycle is a separate `period_ms|v1,v2,...` state with 21 evenly spaced
+points, keeping every state below Home Assistant's 255-character limit. A
+`capture_id` marker is published last so HA can atomically combine the parts
+into long template attributes. The endpoints are linearly interpolated zero
 crossings and power is the point-by-point physical product `U * I`.
 
 ```yaml
@@ -74,10 +76,23 @@ waveform:
     name: Capture Waveform
   voltage:
     name: Waveform Voltage
+  voltage_2: {name: Waveform Voltage 2}
+  voltage_3: {name: Waveform Voltage 3}
+  voltage_4: {name: Waveform Voltage 4}
+  voltage_5: {name: Waveform Voltage 5}
   current:
     name: Waveform Current
+  current_2: {name: Waveform Current 2}
+  current_3: {name: Waveform Current 3}
+  current_4: {name: Waveform Current 4}
+  current_5: {name: Waveform Current 5}
   power:
     name: Waveform Power
+  power_2: {name: Waveform Power 2}
+  power_3: {name: Waveform Power 3}
+  power_4: {name: Waveform Power 4}
+  power_5: {name: Waveform Power 5}
+  capture_id: {name: Waveform Capture ID}
 ```
 
 The default voltage/current/power conversion coefficients are the same as the

@@ -76,10 +76,23 @@ sensor:
         name: Capture Waveform
       voltage:
         name: Waveform Voltage
+      voltage_2: {name: Waveform Voltage 2}
+      voltage_3: {name: Waveform Voltage 3}
+      voltage_4: {name: Waveform Voltage 4}
+      voltage_5: {name: Waveform Voltage 5}
       current:
         name: Waveform Current
+      current_2: {name: Waveform Current 2}
+      current_3: {name: Waveform Current 3}
+      current_4: {name: Waveform Current 4}
+      current_5: {name: Waveform Current 5}
       power:
         name: Waveform Power
+      power_2: {name: Waveform Power 2}
+      power_3: {name: Waveform Power 3}
+      power_4: {name: Waveform Power 4}
+      power_5: {name: Waveform Power 5}
+      capture_id: {name: Waveform Capture ID}
 
     channel_1:
       current: Grid L1 Current

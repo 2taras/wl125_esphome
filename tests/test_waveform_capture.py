@@ -22,23 +22,53 @@ def positive_crossings(samples):
     return result
 
 
-def capture_period(samples, voltage_calibration, current_calibration, max_gap_ms=3.0):
+def capture_periods(
+    samples,
+    voltage_calibration,
+    current_calibration,
+    max_periods=5,
+    max_gap_ms=3.0,
+):
     crossings = positive_crossings(samples)
     if len(crossings) < 2:
-        return None
-    selected = None
-    for start, end in zip(reversed(crossings[:-1]), reversed(crossings[1:])):
+        return []
+    candidates = []
+    for start, end in zip(crossings[:-1], crossings[1:]):
         start_time, start_current, start_right = start
         end_time, end_current, end_right = end
         if 12.0 <= end_time - start_time <= 30.0 and all(
             samples[index][0] - samples[index - 1][0] <= max_gap_ms
             for index in range(start_right + 1, end_right + 1)
         ):
-            selected = start, end
-            break
-    if selected is None:
-        return None
-    (start_time, start_current, start_right), (end_time, end_current, end_right) = selected
+            candidates.append((start, end))
+        else:
+            candidates.append(None)
+
+    best = []
+    current = []
+    for candidate in candidates:
+        if candidate is None:
+            current = []
+            continue
+        current.append(candidate)
+        current = current[-max_periods:]
+        if len(current) >= len(best):
+            best = list(current)
+
+    return [
+        resample_period(
+            samples, selected, voltage_calibration, current_calibration
+        )
+        for selected in best
+    ]
+
+
+def resample_period(samples, selected, voltage_calibration, current_calibration):
+    (start_time, start_current, start_right), (
+        end_time,
+        end_current,
+        end_right,
+    ) = selected
     period = end_time - start_time
     output = []
     segment = start_right
@@ -61,7 +91,18 @@ def capture_period(samples, voltage_calibration, current_calibration, max_gap_ms
     return period, output
 
 
-def make_samples(frequency, phase_offset, count=128, sample_rate=1000, sequence_start=0):
+def capture_period(samples, voltage_calibration, current_calibration, max_gap_ms=3.0):
+    captures = capture_periods(
+        samples,
+        voltage_calibration,
+        current_calibration,
+        max_periods=1,
+        max_gap_ms=max_gap_ms,
+    )
+    return captures[-1] if captures else None
+
+
+def make_samples(frequency, phase_offset, count=160, sample_rate=1000, sequence_start=0):
     result = []
     for sequence in range(sequence_start, sequence_start + count):
         time_s = sequence / sample_rate
@@ -130,6 +171,36 @@ class WaveformCaptureTest(unittest.TestCase):
         self.assertLessEqual(len(voltage), 255)
         self.assertLessEqual(len(current), 255)
         self.assertLessEqual(len(power), 255)
+
+    def test_five_real_periods_fit_ring_at_43_hz_and_above(self):
+        for frequency in (43, 45, 50, 60):
+            for phase_offset in (-120, 0, 120):
+                with self.subTest(frequency=frequency, phase_offset=phase_offset):
+                    captures = capture_periods(
+                        make_samples(frequency, phase_offset), 1.0, 1.0
+                    )
+                    self.assertEqual(len(captures), 5)
+                    for period, points in captures:
+                        self.assertAlmostEqual(
+                            period, 1000.0 / frequency, delta=0.08
+                        )
+                        self.assertEqual(len(points), OUTPUT_POINTS)
+
+    def test_capture_never_uses_more_than_available_buffer_periods(self):
+        captures = capture_periods(
+            make_samples(43, 0, count=105), 1.0, 1.0
+        )
+        self.assertLess(len(captures), 5)
+        self.assertTrue(captures)
+
+    def test_five_parts_combine_into_long_home_assistant_attribute(self):
+        captures = capture_periods(make_samples(43, 120), 1.0, 1.0)
+        voltage_parts = [
+            encode(period, [point[0] for point in points], 1)
+            for period, points in captures
+        ]
+        self.assertTrue(all(len(part) <= 255 for part in voltage_parts))
+        self.assertGreater(len(";".join(voltage_parts)), 255)
 
     def test_all_six_channel_choices(self):
         offsets = (0, 0, 0, 120, 0, -120)

@@ -22,7 +22,6 @@ static constexpr uint8_t BL0906_I_WAVE[BL0906_CHANNEL_COUNT] = {0x02, 0x03, 0x04
 static constexpr uint8_t BL0906_V_WAVE = 0x0B;
 static constexpr uint8_t BL0906_PERIOD = 0x4E;
 static constexpr uint8_t BL0906_TEMPERATURE = 0x5E;
-static constexpr size_t BL0906_WAVEFORM_POINTS = 21;
 
 void BL0906WaveformChannelSelect::control(size_t index) {
   if (this->parent_ == nullptr || index >= BL0906_CHANNEL_COUNT)
@@ -354,8 +353,9 @@ void BL0906SPI::set_waveform_channel(uint8_t channel) {
     this->waveform_channel_ = channel;
 }
 
-std::string BL0906SPI::format_waveform_(float period_ms, const std::array<double, 21> &values,
-                                       uint8_t decimals) const {
+std::string BL0906SPI::format_waveform_(
+    float period_ms, const std::array<double, BL0906_WAVEFORM_POINTS> &values,
+    uint8_t decimals) const {
   std::string output = str_sprintf("%.3f|", period_ms);
   for (size_t index = 0; index < values.size(); index++) {
     if (index != 0)
@@ -369,8 +369,13 @@ std::string BL0906SPI::format_waveform_(float period_ms, const std::array<double
 }
 
 void BL0906SPI::capture_waveform() {
-  if (this->waveform_voltage_sensor_ == nullptr || this->waveform_current_sensor_ == nullptr ||
-      this->waveform_power_sensor_ == nullptr || this->write_sequence_ < 4) {
+  size_t configured_periods = 0;
+  while (configured_periods < BL0906_WAVEFORM_MAX_PERIODS &&
+         this->waveform_voltage_sensors_[configured_periods] != nullptr &&
+         this->waveform_current_sensors_[configured_periods] != nullptr &&
+         this->waveform_power_sensors_[configured_periods] != nullptr)
+    configured_periods++;
+  if (configured_periods == 0 || this->write_sequence_ < 4) {
     ESP_LOGW(TAG, "Waveform capture is not configured or the sample buffer is not ready");
     return;
   }
@@ -416,7 +421,7 @@ void BL0906SPI::capture_waveform() {
     return;
   }
 
-  auto crossing = [&](size_t right) {
+  auto crossing = [&](size_t right) -> Point {
     const Point &left_point = points[right - 1];
     const Point &right_point = points[right];
     const double denominator = right_point.voltage - left_point.voltage;
@@ -429,89 +434,123 @@ void BL0906SPI::capture_waveform() {
     return result;
   };
 
-  // API/Wi-Fi work can occasionally delay one sample. Walk backwards over
-  // all available cycles so a damaged newest cycle does not make the capture
-  // button fail when an older complete cycle is still in the ring buffer.
-  size_t previous_crossing = 0;
-  size_t last_crossing = 0;
-  Point start{};
-  Point end{};
-  uint32_t period_us = 0;
-  bool found_period = false;
-  for (size_t candidate = crossing_count - 1; candidate > 0; candidate--) {
-    const size_t candidate_start = crossings[candidate - 1];
-    const size_t candidate_end = crossings[candidate];
+  struct PeriodWindow {
+    size_t first_sample;
+    size_t last_sample;
+    Point start;
+    Point end;
+    uint32_t duration_us;
+  };
+  std::array<PeriodWindow, 15> candidates{};
+  std::array<bool, 15> candidate_valid{};
+  const size_t candidate_count = crossing_count - 1;
+  for (size_t candidate = 0; candidate < candidate_count; candidate++) {
+    const size_t candidate_start = crossings[candidate];
+    const size_t candidate_end = crossings[candidate + 1];
     const Point candidate_start_point = crossing(candidate_start);
     const Point candidate_end_point = crossing(candidate_end);
-    const uint32_t candidate_period_us = candidate_end_point.time_us - candidate_start_point.time_us;
-    if (candidate_period_us < 12000 || candidate_period_us > 30000)
+    const uint32_t duration_us = candidate_end_point.time_us - candidate_start_point.time_us;
+    if (duration_us < 12000 || duration_us > 30000)
       continue;
     bool has_gap = false;
-    for (size_t index = candidate_start; index <= candidate_end; index++) {
-      if (index > candidate_start &&
-          points[index].time_us - points[index - 1].time_us > this->sample_interval_us_ * 3) {
+    for (size_t index = candidate_start + 1; index <= candidate_end; index++) {
+      if (points[index].time_us - points[index - 1].time_us > this->sample_interval_us_ * 3) {
         has_gap = true;
         break;
       }
     }
     if (!has_gap) {
-      previous_crossing = candidate_start;
-      last_crossing = candidate_end;
-      start = candidate_start_point;
-      end = candidate_end_point;
-      period_us = candidate_period_us;
-      found_period = true;
-      break;
+      candidates[candidate] = {candidate_start, candidate_end, candidate_start_point,
+                               candidate_end_point, duration_us};
+      candidate_valid[candidate] = true;
     }
   }
-  if (!found_period) {
+
+  // Prefer the newest longest consecutive run. If an API/Wi-Fi delay damaged
+  // the latest cycle, an older complete five-cycle run is still usable.
+  size_t current_length = 0;
+  size_t best_start = 0;
+  size_t best_length = 0;
+  for (size_t candidate = 0; candidate < candidate_count; candidate++) {
+    if (!candidate_valid[candidate]) {
+      current_length = 0;
+      continue;
+    }
+    current_length++;
+    const size_t usable_length = std::min(current_length, configured_periods);
+    const size_t usable_start = candidate + 1 - usable_length;
+    if (usable_length > best_length || (usable_length == best_length && usable_start > best_start)) {
+      best_start = usable_start;
+      best_length = usable_length;
+    }
+  }
+  if (best_length == 0) {
     ESP_LOGW(TAG, "No complete waveform without sample gaps is available");
     return;
   }
 
-  std::array<double, BL0906_WAVEFORM_POINTS> voltage{};
-  std::array<double, BL0906_WAVEFORM_POINTS> current{};
-  std::array<double, BL0906_WAVEFORM_POINTS> power{};
-  size_t segment = previous_crossing;
-  for (size_t output_index = 0; output_index < BL0906_WAVEFORM_POINTS; output_index++) {
-    const uint32_t target_elapsed = static_cast<uint32_t>(
-        static_cast<uint64_t>(period_us) * output_index / (BL0906_WAVEFORM_POINTS - 1));
-    const uint32_t target_time = start.time_us + target_elapsed;
-    double raw_voltage = 0.0;
-    double raw_current = start.current;
-    if (output_index == BL0906_WAVEFORM_POINTS - 1) {
-      raw_current = end.current;
-    } else if (output_index != 0) {
-      while (segment < last_crossing && time_after_or_equal_(target_time, points[segment].time_us))
-        segment++;
-      const Point &right_point = points[segment];
-      const Point &left_point = points[segment - 1];
-      const uint32_t span = right_point.time_us - left_point.time_us;
-      const double ratio = span == 0 ? 0.0 : static_cast<double>(target_time - left_point.time_us) / span;
-      raw_voltage = left_point.voltage + ratio * (right_point.voltage - left_point.voltage);
-      raw_current = left_point.current + ratio * (right_point.current - left_point.current);
+  std::array<std::string, BL0906_WAVEFORM_MAX_PERIODS> voltage_states{};
+  std::array<std::string, BL0906_WAVEFORM_MAX_PERIODS> current_states{};
+  std::array<std::string, BL0906_WAVEFORM_MAX_PERIODS> power_states{};
+  for (size_t period_index = 0; period_index < best_length; period_index++) {
+    const PeriodWindow &window = candidates[best_start + period_index];
+    std::array<double, BL0906_WAVEFORM_POINTS> voltage{};
+    std::array<double, BL0906_WAVEFORM_POINTS> current{};
+    std::array<double, BL0906_WAVEFORM_POINTS> power{};
+    size_t segment = window.first_sample;
+    for (size_t output_index = 0; output_index < BL0906_WAVEFORM_POINTS; output_index++) {
+      const uint32_t target_elapsed = static_cast<uint32_t>(
+          static_cast<uint64_t>(window.duration_us) * output_index / (BL0906_WAVEFORM_POINTS - 1));
+      const uint32_t target_time = window.start.time_us + target_elapsed;
+      double raw_voltage = 0.0;
+      double raw_current = window.start.current;
+      if (output_index == BL0906_WAVEFORM_POINTS - 1) {
+        raw_current = window.end.current;
+      } else if (output_index != 0) {
+        while (segment < window.last_sample && time_after_or_equal_(target_time, points[segment].time_us))
+          segment++;
+        const Point &right_point = points[segment];
+        const Point &left_point = points[segment - 1];
+        const uint32_t span = right_point.time_us - left_point.time_us;
+        const double ratio = span == 0 ? 0.0 : static_cast<double>(target_time - left_point.time_us) / span;
+        raw_voltage = left_point.voltage + ratio * (right_point.voltage - left_point.voltage);
+        raw_current = left_point.current + ratio * (right_point.current - left_point.current);
+      }
+      voltage[output_index] = raw_voltage * this->voltage_calibration_;
+      current[output_index] = raw_current * this->current_calibration_[this->waveform_channel_];
+      // The waveform is deliberately the physical instantaneous product U * I.
+      power[output_index] = voltage[output_index] * current[output_index];
     }
-    voltage[output_index] = raw_voltage * this->voltage_calibration_;
-    current[output_index] = raw_current * this->current_calibration_[this->waveform_channel_];
-    // The waveform is deliberately the physical instantaneous product U * I.
-    // The independently calibrated active-power coefficient remains in use for
-    // the averaged power and energy entities and is not changed here.
-    power[output_index] = voltage[output_index] * current[output_index];
+
+    const float period_ms = window.duration_us / 1000.0f;
+    voltage_states[period_index] = this->format_waveform_(period_ms, voltage, 1);
+    current_states[period_index] = this->format_waveform_(period_ms, current, 3);
+    power_states[period_index] = this->format_waveform_(period_ms, power, 1);
+    if (voltage_states[period_index].size() > 255 || current_states[period_index].size() > 255 ||
+        power_states[period_index].size() > 255) {
+      ESP_LOGW(TAG, "Waveform period payload exceeds the Home Assistant state limit");
+      return;
+    }
   }
 
-  const float period_ms = period_us / 1000.0f;
-  const std::string voltage_state = this->format_waveform_(period_ms, voltage, 1);
-  const std::string current_state = this->format_waveform_(period_ms, current, 3);
-  const std::string power_state = this->format_waveform_(period_ms, power, 1);
-  if (voltage_state.size() > 255 || current_state.size() > 255 || power_state.size() > 255) {
-    ESP_LOGW(TAG, "Waveform payload exceeds the Home Assistant state limit");
-    return;
+  // Publish the completion marker last. HA templates trigger on it and see an
+  // atomic snapshot of all period parts rather than a mixture of two captures.
+  for (size_t period_index = 0; period_index < configured_periods; period_index++) {
+    const bool present = period_index < best_length;
+    this->waveform_voltage_sensors_[period_index]->publish_state(
+        present ? voltage_states[period_index] : "0|");
+    this->waveform_current_sensors_[period_index]->publish_state(
+        present ? current_states[period_index] : "0|");
+    this->waveform_power_sensors_[period_index]->publish_state(
+        present ? power_states[period_index] : "0|");
   }
-  this->waveform_voltage_sensor_->publish_state(voltage_state);
-  this->waveform_current_sensor_->publish_state(current_state);
-  this->waveform_power_sensor_->publish_state(power_state);
-  ESP_LOGI(TAG, "Captured %.3f ms waveform for channel %u", period_ms,
-           static_cast<unsigned>(this->waveform_channel_ + 1));
+  if (this->waveform_capture_id_sensor_ != nullptr) {
+    this->waveform_capture_id_sensor_->publish_state(
+        str_sprintf("%lu-%lu", static_cast<unsigned long>(millis()),
+                    static_cast<unsigned long>(++this->waveform_capture_sequence_)));
+  }
+  ESP_LOGI(TAG, "Captured %u complete waveform periods for channel %u",
+           static_cast<unsigned>(best_length), static_cast<unsigned>(this->waveform_channel_ + 1));
 }
 
 void BL0906SPI::update() {
@@ -629,9 +668,12 @@ void BL0906SPI::dump_config() {
   LOG_SENSOR("  ", "Total Power Factor", this->total_power_factor_sensor_);
   LOG_SELECT("  ", "Waveform Channel", this->waveform_channel_select_);
   LOG_BUTTON("  ", "Capture Waveform", this->waveform_capture_button_);
-  LOG_TEXT_SENSOR("  ", "Waveform Voltage", this->waveform_voltage_sensor_);
-  LOG_TEXT_SENSOR("  ", "Waveform Current", this->waveform_current_sensor_);
-  LOG_TEXT_SENSOR("  ", "Waveform Power", this->waveform_power_sensor_);
+  for (size_t period = 0; period < BL0906_WAVEFORM_MAX_PERIODS; period++) {
+    LOG_TEXT_SENSOR("  ", "Waveform Voltage Part", this->waveform_voltage_sensors_[period]);
+    LOG_TEXT_SENSOR("  ", "Waveform Current Part", this->waveform_current_sensors_[period]);
+    LOG_TEXT_SENSOR("  ", "Waveform Power Part", this->waveform_power_sensors_[period]);
+  }
+  LOG_TEXT_SENSOR("  ", "Waveform Capture ID", this->waveform_capture_id_sensor_);
   for (size_t channel = 0; channel < BL0906_CHANNEL_COUNT; channel++) {
     ESP_LOGCONFIG(TAG, "  Channel %u:", static_cast<unsigned>(channel + 1));
     LOG_SENSOR("    ", "Current", this->current_sensors_[channel]);

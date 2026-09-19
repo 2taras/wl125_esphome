@@ -57,6 +57,10 @@ CONF_WAVEFORM = "waveform"
 CONF_CHANNEL_NAMES = "channel_names"
 CONF_CHANNEL_SELECT = "channel_select"
 CONF_CAPTURE_BUTTON = "capture_button"
+CONF_CAPTURE_ID = "capture_id"
+CONF_VOLTAGE_PARTS = [CONF_VOLTAGE, "voltage_2", "voltage_3", "voltage_4", "voltage_5"]
+CONF_CURRENT_PARTS = [CONF_CURRENT, "current_2", "current_3", "current_4", "current_5"]
+CONF_POWER_PARTS = [CONF_POWER, "power_2", "power_3", "power_4", "power_5"]
 
 # Defaults match the coefficients used by ESPHome's stock BL0906 component for
 # the Athom/IoTorero EM6 analogue front end.
@@ -208,6 +212,21 @@ WAVEFORM_SCHEMA = cv.Schema(
         ),
         cv.Required(CONF_POWER): text_sensor.text_sensor_schema(
             icon="mdi:flash"
+        ),
+        cv.Optional("voltage_2"): text_sensor.text_sensor_schema(icon="mdi:sine-wave"),
+        cv.Optional("voltage_3"): text_sensor.text_sensor_schema(icon="mdi:sine-wave"),
+        cv.Optional("voltage_4"): text_sensor.text_sensor_schema(icon="mdi:sine-wave"),
+        cv.Optional("voltage_5"): text_sensor.text_sensor_schema(icon="mdi:sine-wave"),
+        cv.Optional("current_2"): text_sensor.text_sensor_schema(icon="mdi:current-ac"),
+        cv.Optional("current_3"): text_sensor.text_sensor_schema(icon="mdi:current-ac"),
+        cv.Optional("current_4"): text_sensor.text_sensor_schema(icon="mdi:current-ac"),
+        cv.Optional("current_5"): text_sensor.text_sensor_schema(icon="mdi:current-ac"),
+        cv.Optional("power_2"): text_sensor.text_sensor_schema(icon="mdi:flash"),
+        cv.Optional("power_3"): text_sensor.text_sensor_schema(icon="mdi:flash"),
+        cv.Optional("power_4"): text_sensor.text_sensor_schema(icon="mdi:flash"),
+        cv.Optional("power_5"): text_sensor.text_sensor_schema(icon="mdi:flash"),
+        cv.Optional(CONF_CAPTURE_ID): text_sensor.text_sensor_schema(
+            icon="mdi:identifier"
         ),
     }
 )
@@ -368,15 +387,23 @@ async def to_code(config):
         cg.add(capture_button.set_parent(var))
         cg.add(var.set_waveform_capture_button(capture_button))
 
-        for key, setter in (
-            (CONF_VOLTAGE, "set_waveform_voltage_sensor"),
-            (CONF_CURRENT, "set_waveform_current_sensor"),
-            (CONF_POWER, "set_waveform_power_sensor"),
+        for keys, setter in (
+            (CONF_VOLTAGE_PARTS, "set_waveform_voltage_sensor"),
+            (CONF_CURRENT_PARTS, "set_waveform_current_sensor"),
+            (CONF_POWER_PARTS, "set_waveform_power_sensor"),
         ):
-            waveform_sensor = await text_sensor.new_text_sensor(
-                waveform_config[key]
+            for period, key in enumerate(keys):
+                if sensor_config := waveform_config.get(key):
+                    waveform_sensor = await text_sensor.new_text_sensor(
+                        sensor_config
+                    )
+                    cg.add(getattr(var, setter)(period, waveform_sensor))
+
+        if capture_id_config := waveform_config.get(CONF_CAPTURE_ID):
+            capture_id_sensor = await text_sensor.new_text_sensor(
+                capture_id_config
             )
-            cg.add(getattr(var, setter)(waveform_sensor))
+            cg.add(var.set_waveform_capture_id_sensor(capture_id_sensor))
 
     for index in range(6):
         channel = config.get(f"channel_{index + 1}")

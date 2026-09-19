@@ -17,7 +17,9 @@ namespace esphome {
 namespace bl0906_spi {
 
 static constexpr size_t BL0906_CHANNEL_COUNT = 6;
-static constexpr size_t BL0906_WAVE_BUFFER_SIZE = 128;
+static constexpr size_t BL0906_WAVE_BUFFER_SIZE = 160;
+static constexpr size_t BL0906_WAVEFORM_MAX_PERIODS = 5;
+static constexpr size_t BL0906_WAVEFORM_POINTS = 21;
 
 struct BL0906WaveSample {
   uint64_t sequence{UINT64_MAX};
@@ -94,9 +96,18 @@ class BL0906SPI : public PollingComponent,
   void set_waveform_capture_button(BL0906WaveformCaptureButton *button) {
     this->waveform_capture_button_ = button;
   }
-  void set_waveform_voltage_sensor(text_sensor::TextSensor *sensor) { this->waveform_voltage_sensor_ = sensor; }
-  void set_waveform_current_sensor(text_sensor::TextSensor *sensor) { this->waveform_current_sensor_ = sensor; }
-  void set_waveform_power_sensor(text_sensor::TextSensor *sensor) { this->waveform_power_sensor_ = sensor; }
+  void set_waveform_voltage_sensor(uint8_t period, text_sensor::TextSensor *sensor) {
+    this->waveform_voltage_sensors_[period] = sensor;
+  }
+  void set_waveform_current_sensor(uint8_t period, text_sensor::TextSensor *sensor) {
+    this->waveform_current_sensors_[period] = sensor;
+  }
+  void set_waveform_power_sensor(uint8_t period, text_sensor::TextSensor *sensor) {
+    this->waveform_power_sensors_[period] = sensor;
+  }
+  void set_waveform_capture_id_sensor(text_sensor::TextSensor *sensor) {
+    this->waveform_capture_id_sensor_ = sensor;
+  }
 
   void set_current_sensor(uint8_t channel, sensor::Sensor *sensor) { this->current_sensors_[channel] = sensor; }
   void set_power_sensor(uint8_t channel, sensor::Sensor *sensor) { this->power_sensors_[channel] = sensor; }
@@ -130,7 +141,9 @@ class BL0906SPI : public PollingComponent,
   void read_frequency_();
   void read_temperature_();
   void save_energy_();
-  std::string format_waveform_(float period_ms, const std::array<double, 21> &values, uint8_t decimals) const;
+  std::string format_waveform_(float period_ms,
+                               const std::array<double, BL0906_WAVEFORM_POINTS> &values,
+                               uint8_t decimals) const;
 
   static int32_t sign_extend_24_(uint32_t value);
   static bool time_after_or_equal_(uint32_t a, uint32_t b) { return static_cast<int32_t>(a - b) >= 0; }
@@ -193,10 +206,12 @@ class BL0906SPI : public PollingComponent,
   sensor::Sensor *temperature_sensor_{nullptr};
   BL0906WaveformChannelSelect *waveform_channel_select_{nullptr};
   BL0906WaveformCaptureButton *waveform_capture_button_{nullptr};
-  text_sensor::TextSensor *waveform_voltage_sensor_{nullptr};
-  text_sensor::TextSensor *waveform_current_sensor_{nullptr};
-  text_sensor::TextSensor *waveform_power_sensor_{nullptr};
+  std::array<text_sensor::TextSensor *, BL0906_WAVEFORM_MAX_PERIODS> waveform_voltage_sensors_{};
+  std::array<text_sensor::TextSensor *, BL0906_WAVEFORM_MAX_PERIODS> waveform_current_sensors_{};
+  std::array<text_sensor::TextSensor *, BL0906_WAVEFORM_MAX_PERIODS> waveform_power_sensors_{};
+  text_sensor::TextSensor *waveform_capture_id_sensor_{nullptr};
   uint8_t waveform_channel_{0};
+  uint32_t waveform_capture_sequence_{0};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> current_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> power_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> energy_sensors_{};
