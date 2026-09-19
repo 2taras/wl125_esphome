@@ -3,12 +3,19 @@
 #include <algorithm>
 #include <cmath>
 
+#include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
 namespace esphome {
 namespace bl0906_spi {
 
 static const char *const TAG = "bl0906_spi";
+
+// Keep the energy preference independent of entity names. Entity names are
+// user-facing and may change, while the accumulated energy must survive OTA
+// updates and renames.
+static constexpr uint32_t BL0906_ENERGY_PREFERENCE_KEY = 0xB10906E1UL;
+static constexpr uint32_t BL0906_LEGACY_PREFERENCE_SALT = 0xB1090601UL;
 
 static constexpr uint8_t BL0906_SPI_READ = 0x82;
 static constexpr uint8_t BL0906_I_WAVE[BL0906_CHANNEL_COUNT] = {0x02, 0x03, 0x04, 0x05, 0x08, 0x09};
@@ -65,11 +72,34 @@ void BL0906SPI::setup() {
     }
     if (key_sensor != nullptr) {
       this->energy_preference_ = global_preferences->make_preference<BL0906EnergyRestoreState>(
-          key_sensor->get_object_id_hash() ^ 0xB1090601UL);
+          BL0906_ENERGY_PREFERENCE_KEY);
       BL0906EnergyRestoreState restored;
-      if (this->energy_preference_.load(&restored)) {
+      bool loaded = this->energy_preference_.load(&restored);
+
+      // Migrate the preference format used before the key became stable. The
+      // standard Grid L1 name covers existing deployed meters; the current
+      // first energy sensor covers custom configurations.
+      if (!loaded) {
+        const uint32_t deployed_legacy_key =
+            fnv1_hash("grid_l1_corrected_energy") ^ BL0906_LEGACY_PREFERENCE_SALT;
+        auto deployed_legacy =
+            global_preferences->make_preference<BL0906EnergyRestoreState>(deployed_legacy_key);
+        loaded = deployed_legacy.load(&restored);
+      }
+      if (!loaded) {
+        const uint32_t current_legacy_key =
+            key_sensor->get_object_id_hash() ^ BL0906_LEGACY_PREFERENCE_SALT;
+        auto current_legacy =
+            global_preferences->make_preference<BL0906EnergyRestoreState>(current_legacy_key);
+        loaded = current_legacy.load(&restored);
+      }
+
+      if (loaded) {
         this->energy_kwh_ = restored.energy_kwh;
         ESP_LOGI(TAG, "Restored corrected energy counters");
+        // Store immediately under the stable key so later renames no longer
+        // affect recovery.
+        this->energy_preference_.save(&restored);
       }
       this->preference_ready_ = true;
       this->set_interval("save_energy", 300000, [this]() { this->save_energy_(); });
