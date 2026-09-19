@@ -56,6 +56,8 @@ class BL0906SPI : public PollingComponent,
   void set_frequency_sensor(sensor::Sensor *sensor) { this->frequency_sensor_ = sensor; }
   void set_total_power_sensor(sensor::Sensor *sensor) { this->total_power_sensor_ = sensor; }
   void set_total_energy_sensor(sensor::Sensor *sensor) { this->total_energy_sensor_ = sensor; }
+  void set_total_apparent_power_sensor(sensor::Sensor *sensor) { this->total_apparent_power_sensor_ = sensor; }
+  void set_total_power_factor_sensor(sensor::Sensor *sensor) { this->total_power_factor_sensor_ = sensor; }
   void set_actual_sample_rate_sensor(sensor::Sensor *sensor) { this->actual_sample_rate_sensor_ = sensor; }
   void set_spi_errors_sensor(sensor::Sensor *sensor) { this->spi_errors_sensor_ = sensor; }
   void set_raw_voltage_rms_sensor(sensor::Sensor *sensor) { this->raw_voltage_rms_sensor_ = sensor; }
@@ -68,6 +70,18 @@ class BL0906SPI : public PollingComponent,
   }
   void set_raw_power_sensor(uint8_t channel, sensor::Sensor *sensor) {
     this->raw_power_sensors_[channel] = sensor;
+  }
+  void set_apparent_power_sensor(uint8_t channel, sensor::Sensor *sensor) {
+    this->apparent_power_sensors_[channel] = sensor;
+  }
+  void set_power_factor_sensor(uint8_t channel, sensor::Sensor *sensor) {
+    this->power_factor_sensors_[channel] = sensor;
+  }
+  void set_reactive_power_sensor(uint8_t channel, sensor::Sensor *sensor) {
+    this->reactive_power_sensors_[channel] = sensor;
+  }
+  void set_phase_angle_sensor(uint8_t channel, sensor::Sensor *sensor) {
+    this->phase_angle_sensors_[channel] = sensor;
   }
 
  protected:
@@ -133,6 +147,8 @@ class BL0906SPI : public PollingComponent,
   sensor::Sensor *frequency_sensor_{nullptr};
   sensor::Sensor *total_power_sensor_{nullptr};
   sensor::Sensor *total_energy_sensor_{nullptr};
+  sensor::Sensor *total_apparent_power_sensor_{nullptr};
+  sensor::Sensor *total_power_factor_sensor_{nullptr};
   sensor::Sensor *actual_sample_rate_sensor_{nullptr};
   sensor::Sensor *spi_errors_sensor_{nullptr};
   sensor::Sensor *raw_voltage_rms_sensor_{nullptr};
@@ -141,6 +157,10 @@ class BL0906SPI : public PollingComponent,
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> energy_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> raw_current_rms_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> raw_power_sensors_{};
+  std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> apparent_power_sensors_{};
+  std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> power_factor_sensors_{};
+  std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> reactive_power_sensors_{};
+  std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> phase_angle_sensors_{};
 };
 
 }  // namespace bl0906_spi

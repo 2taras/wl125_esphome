@@ -39,11 +39,17 @@ CONF_CURRENT_CALIBRATION = "current_calibration"
 CONF_POWER_CALIBRATION = "power_calibration"
 CONF_TOTAL_POWER = "total_power"
 CONF_TOTAL_ENERGY = "total_energy"
+CONF_TOTAL_APPARENT_POWER = "total_apparent_power"
+CONF_TOTAL_POWER_FACTOR = "total_power_factor"
 CONF_ACTUAL_SAMPLE_RATE = "actual_sample_rate"
 CONF_SPI_ERRORS = "spi_errors"
 CONF_RAW_VOLTAGE_RMS = "raw_voltage_rms"
 CONF_RAW_CURRENT_RMS = "raw_current_rms"
 CONF_RAW_POWER = "raw_power"
+CONF_APPARENT_POWER = "apparent_power"
+CONF_POWER_FACTOR = "power_factor"
+CONF_REACTIVE_POWER = "reactive_power"
+CONF_PHASE_ANGLE = "phase_angle"
 
 # Defaults match the coefficients used by ESPHome's stock BL0906 component for
 # the Athom/IoTorero EM6 analogue front end.
@@ -101,6 +107,44 @@ CHANNEL_SCHEMA = cv.Schema(
             "mdi:chart-bell-curve"
         ),
         cv.Optional(CONF_RAW_POWER): _raw_sensor_schema("mdi:multiplication"),
+        cv.Optional(CONF_APPARENT_POWER): cv.maybe_simple_value(
+            sensor.sensor_schema(
+                icon="mdi:flash",
+                accuracy_decimals=1,
+                device_class="apparent_power",
+                unit_of_measurement="VA",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_POWER_FACTOR): cv.maybe_simple_value(
+            sensor.sensor_schema(
+                icon="mdi:angle-acute",
+                accuracy_decimals=1,
+                device_class="power_factor",
+                unit_of_measurement="%",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_REACTIVE_POWER): cv.maybe_simple_value(
+            sensor.sensor_schema(
+                icon="mdi:sine-wave",
+                accuracy_decimals=1,
+                unit_of_measurement="var",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_PHASE_ANGLE): cv.maybe_simple_value(
+            sensor.sensor_schema(
+                icon="mdi:angle-acute",
+                accuracy_decimals=1,
+                unit_of_measurement="°",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            key=CONF_NAME,
+        ),
         cv.Optional(
             CONF_CURRENT_CALIBRATION, default=DEFAULT_CURRENT_CALIBRATION
         ): cv.positive_float,
@@ -165,6 +209,20 @@ CONFIG_SCHEMA = (
                 unit_of_measurement=UNIT_KILOWATT_HOURS,
                 state_class=STATE_CLASS_TOTAL_INCREASING,
             ),
+            cv.Optional(CONF_TOTAL_APPARENT_POWER): sensor.sensor_schema(
+                icon="mdi:flash",
+                accuracy_decimals=1,
+                device_class="apparent_power",
+                unit_of_measurement="VA",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_TOTAL_POWER_FACTOR): sensor.sensor_schema(
+                icon="mdi:angle-acute",
+                accuracy_decimals=1,
+                device_class="power_factor",
+                unit_of_measurement="%",
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
             cv.Optional(CONF_ACTUAL_SAMPLE_RATE): sensor.sensor_schema(
                 icon="mdi:speedometer",
                 accuracy_decimals=0,
@@ -226,6 +284,12 @@ async def to_code(config):
     await _new_sensor(config, CONF_TOTAL_POWER, "set_total_power_sensor", var)
     await _new_sensor(config, CONF_TOTAL_ENERGY, "set_total_energy_sensor", var)
     await _new_sensor(
+        config, CONF_TOTAL_APPARENT_POWER, "set_total_apparent_power_sensor", var
+    )
+    await _new_sensor(
+        config, CONF_TOTAL_POWER_FACTOR, "set_total_power_factor_sensor", var
+    )
+    await _new_sensor(
         config, CONF_ACTUAL_SAMPLE_RATE, "set_actual_sample_rate_sensor", var
     )
     await _new_sensor(config, CONF_SPI_ERRORS, "set_spi_errors_sensor", var)
@@ -251,6 +315,10 @@ async def to_code(config):
             (CONF_ENERGY, "set_energy_sensor"),
             (CONF_RAW_CURRENT_RMS, "set_raw_current_rms_sensor"),
             (CONF_RAW_POWER, "set_raw_power_sensor"),
+            (CONF_APPARENT_POWER, "set_apparent_power_sensor"),
+            (CONF_POWER_FACTOR, "set_power_factor_sensor"),
+            (CONF_REACTIVE_POWER, "set_reactive_power_sensor"),
+            (CONF_PHASE_ANGLE, "set_phase_angle_sensor"),
         ):
             if sensor_config := channel.get(key):
                 sens = await sensor.new_sensor(sensor_config)

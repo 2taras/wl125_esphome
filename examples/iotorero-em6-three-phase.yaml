@@ -41,7 +41,7 @@ sensor:
     spi_mode: MODE1
     sample_rate: 1000Hz
     update_interval: 1s
-    phase_offsets: [0, 120, -120, 0, 0, 0]
+    phase_offsets: [120, 0, -120, 0, 0, 0]
     restore_energy: true
 
     voltage:
@@ -52,6 +52,10 @@ sensor:
       name: Corrected Total Power
     total_energy:
       name: Corrected Total Energy
+    total_apparent_power:
+      name: Total Apparent Power
+    total_power_factor:
+      name: Total Power Factor
     actual_sample_rate:
       name: Waveform Sample Rate
       entity_category: diagnostic
@@ -66,6 +70,10 @@ sensor:
       current: Grid L1 Current
       power: Grid L1 Corrected Power
       energy: Grid L1 Corrected Energy
+      apparent_power: Grid L1 Apparent Power
+      power_factor: Grid L1 Power Factor
+      reactive_power: Grid L1 Reactive Power Magnitude
+      phase_angle: Grid L1 Phase Angle
       raw_current_rms:
         name: Grid L1 Raw Current RMS
         entity_category: diagnostic
@@ -76,6 +84,10 @@ sensor:
       current: Grid L2 Current
       power: Grid L2 Corrected Power
       energy: Grid L2 Corrected Energy
+      apparent_power: Grid L2 Apparent Power
+      power_factor: Grid L2 Power Factor
+      reactive_power: Grid L2 Reactive Power Magnitude
+      phase_angle: Grid L2 Phase Angle
       raw_current_rms:
         name: Grid L2 Raw Current RMS
         entity_category: diagnostic
@@ -86,6 +98,10 @@ sensor:
       current: Grid L3 Current
       power: Grid L3 Corrected Power
       energy: Grid L3 Corrected Energy
+      apparent_power: Grid L3 Apparent Power
+      power_factor: Grid L3 Power Factor
+      reactive_power: Grid L3 Reactive Power Magnitude
+      phase_angle: Grid L3 Phase Angle
       raw_current_rms:
         name: Grid L3 Raw Current RMS
         entity_category: diagnostic

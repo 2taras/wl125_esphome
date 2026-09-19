@@ -11,8 +11,8 @@ shifting the voltage waveform independently for every channel. The default
 phase model is:
 
 ```text
-channel 1:    0 degrees
-channel 2: +120 degrees
+channel 1: +120 degrees
+channel 2:    0 degrees
 channel 3: -120 degrees
 channel 4:    0 degrees
 channel 5:    0 degrees
@@ -50,6 +50,10 @@ external_components:
 L2/L3 power has the wrong sign, swap `+120` and `-120`; that depends on the
 actual phase order and CT direction. Corrected energy counts consumption only
 (negative/export power is not added) and is saved to flash every five minutes.
+
+The driver can publish apparent power, power factor, reactive power magnitude,
+and phase angle for every channel from the same sampling window as current and
+active power. It can also publish total apparent power and total power factor.
 
 The default voltage/current/power conversion coefficients are the same as the
 stock ESPHome BL0906 component for Athom/IoTorero EM6 hardware. Use the

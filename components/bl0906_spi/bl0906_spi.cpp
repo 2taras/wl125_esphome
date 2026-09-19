@@ -341,18 +341,28 @@ void BL0906SPI::update() {
 
   const double divisor = this->processed_sample_count_;
   const double raw_voltage_rms = std::sqrt(this->voltage_square_sum_ / divisor);
+  const double voltage_rms = raw_voltage_rms * this->voltage_calibration_;
   if (this->raw_voltage_rms_sensor_ != nullptr)
     this->raw_voltage_rms_sensor_->publish_state(raw_voltage_rms);
   if (this->voltage_sensor_ != nullptr)
-    this->voltage_sensor_->publish_state(raw_voltage_rms * this->voltage_calibration_);
+    this->voltage_sensor_->publish_state(voltage_rms);
 
   double total_power = 0.0;
+  double total_apparent_power = 0.0;
   float total_energy = 0.0f;
   for (size_t channel = 0; channel < BL0906_CHANNEL_COUNT; channel++) {
     const double raw_current_rms = std::sqrt(this->current_square_sum_[channel] / divisor);
     const double raw_power = this->product_sum_[channel] / divisor;
+    const double current = raw_current_rms * this->current_calibration_[channel];
     const double power = raw_power * this->power_calibration_[channel];
+    const double apparent_power = voltage_rms * current;
+    const double power_factor = apparent_power >= 1.0
+                                    ? std::max(-1.0, std::min(1.0, power / apparent_power))
+                                    : NAN;
+    const double reactive_power = std::sqrt(std::max(0.0, apparent_power * apparent_power - power * power));
+    const double phase_angle = std::isfinite(power_factor) ? std::acos(power_factor) * 180.0 / M_PI : NAN;
     total_power += power;
+    total_apparent_power += apparent_power;
     total_energy += this->energy_kwh_[channel];
 
     if (this->raw_current_rms_sensors_[channel] != nullptr)
@@ -360,17 +370,33 @@ void BL0906SPI::update() {
     if (this->raw_power_sensors_[channel] != nullptr)
       this->raw_power_sensors_[channel]->publish_state(raw_power);
     if (this->current_sensors_[channel] != nullptr)
-      this->current_sensors_[channel]->publish_state(raw_current_rms * this->current_calibration_[channel]);
+      this->current_sensors_[channel]->publish_state(current);
     if (this->power_sensors_[channel] != nullptr)
       this->power_sensors_[channel]->publish_state(power);
     if (this->energy_sensors_[channel] != nullptr)
       this->energy_sensors_[channel]->publish_state(this->energy_kwh_[channel]);
+    if (this->apparent_power_sensors_[channel] != nullptr)
+      this->apparent_power_sensors_[channel]->publish_state(apparent_power);
+    if (this->power_factor_sensors_[channel] != nullptr)
+      this->power_factor_sensors_[channel]->publish_state(power_factor * 100.0);
+    if (this->reactive_power_sensors_[channel] != nullptr)
+      this->reactive_power_sensors_[channel]->publish_state(reactive_power);
+    if (this->phase_angle_sensors_[channel] != nullptr)
+      this->phase_angle_sensors_[channel]->publish_state(phase_angle);
   }
 
   if (this->total_power_sensor_ != nullptr)
     this->total_power_sensor_->publish_state(total_power);
   if (this->total_energy_sensor_ != nullptr)
     this->total_energy_sensor_->publish_state(total_energy);
+  if (this->total_apparent_power_sensor_ != nullptr)
+    this->total_apparent_power_sensor_->publish_state(total_apparent_power);
+  if (this->total_power_factor_sensor_ != nullptr) {
+    const double total_power_factor = total_apparent_power >= 1.0
+                                          ? std::max(-1.0, std::min(1.0, total_power / total_apparent_power))
+                                          : NAN;
+    this->total_power_factor_sensor_->publish_state(total_power_factor * 100.0);
+  }
 
   this->voltage_square_sum_ = 0.0;
   this->current_square_sum_.fill(0.0);
@@ -400,11 +426,17 @@ void BL0906SPI::dump_config() {
   LOG_SENSOR("  ", "Frequency", this->frequency_sensor_);
   LOG_SENSOR("  ", "Total Power", this->total_power_sensor_);
   LOG_SENSOR("  ", "Total Energy", this->total_energy_sensor_);
+  LOG_SENSOR("  ", "Total Apparent Power", this->total_apparent_power_sensor_);
+  LOG_SENSOR("  ", "Total Power Factor", this->total_power_factor_sensor_);
   for (size_t channel = 0; channel < BL0906_CHANNEL_COUNT; channel++) {
     ESP_LOGCONFIG(TAG, "  Channel %u:", static_cast<unsigned>(channel + 1));
     LOG_SENSOR("    ", "Current", this->current_sensors_[channel]);
     LOG_SENSOR("    ", "Corrected Power", this->power_sensors_[channel]);
     LOG_SENSOR("    ", "Corrected Energy", this->energy_sensors_[channel]);
+    LOG_SENSOR("    ", "Apparent Power", this->apparent_power_sensors_[channel]);
+    LOG_SENSOR("    ", "Power Factor", this->power_factor_sensors_[channel]);
+    LOG_SENSOR("    ", "Reactive Power", this->reactive_power_sensors_[channel]);
+    LOG_SENSOR("    ", "Phase Angle", this->phase_angle_sensors_[channel]);
   }
 }
 

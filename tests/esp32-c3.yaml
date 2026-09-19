@@ -4,7 +4,7 @@ esphome:
 esp32:
   board: esp32-c3-devkitm-1
   framework:
-    type: arduino
+    type: esp-idf
 
 logger:
 
@@ -28,7 +28,7 @@ sensor:
     cs_pin: GPIO5
     select_pin: GPIO3
     reset_pin: GPIO6
-    phase_offsets: [0, 120, -120, 0, 0, 0]
+    phase_offsets: [120, 0, -120, 0, 0, 0]
     voltage:
       name: Voltage
     frequency:
@@ -37,6 +37,10 @@ sensor:
       name: Total Power
     total_energy:
       name: Total Energy
+    total_apparent_power:
+      name: Total Apparent Power
+    total_power_factor:
+      name: Total Power Factor
     actual_sample_rate:
       name: Sample Rate
     spi_errors:
@@ -47,6 +51,10 @@ sensor:
       current: Channel 1 Current
       power: Channel 1 Power
       energy: Channel 1 Energy
+      apparent_power: Channel 1 Apparent Power
+      power_factor: Channel 1 Power Factor
+      reactive_power: Channel 1 Reactive Power Magnitude
+      phase_angle: Channel 1 Phase Angle
       raw_current_rms:
         name: Channel 1 Raw Current RMS
       raw_power:
