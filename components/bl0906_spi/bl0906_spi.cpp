@@ -21,6 +21,20 @@ static constexpr uint8_t BL0906_SPI_READ = 0x82;
 static constexpr uint8_t BL0906_I_WAVE[BL0906_CHANNEL_COUNT] = {0x02, 0x03, 0x04, 0x05, 0x08, 0x09};
 static constexpr uint8_t BL0906_V_WAVE = 0x0B;
 static constexpr uint8_t BL0906_PERIOD = 0x4E;
+static constexpr uint8_t BL0906_TEMPERATURE = 0x5E;
+static constexpr size_t BL0906_WAVEFORM_POINTS = 21;
+
+void BL0906WaveformChannelSelect::control(size_t index) {
+  if (this->parent_ == nullptr || index >= BL0906_CHANNEL_COUNT)
+    return;
+  this->parent_->set_waveform_channel(index);
+  this->publish_state(index);
+}
+
+void BL0906WaveformCaptureButton::press_action() {
+  if (this->parent_ != nullptr)
+    this->parent_->capture_waveform();
+}
 
 int32_t BL0906SPI::sign_extend_24_(uint32_t value) {
   value &= 0x00FFFFFFUL;
@@ -109,6 +123,9 @@ void BL0906SPI::setup() {
   this->publish_window_start_ms_ = millis();
   this->next_sample_us_ = micros() + this->sample_interval_us_;
   this->read_frequency_();
+  this->read_temperature_();
+  if (this->waveform_channel_select_ != nullptr)
+    this->waveform_channel_select_->publish_state(this->waveform_channel_);
   this->high_frequency_loop_.start();
 }
 
@@ -317,8 +334,189 @@ void BL0906SPI::read_frequency_() {
     this->frequency_hz_ = frequency;
 }
 
+void BL0906SPI::read_temperature_() {
+  if (this->temperature_sensor_ == nullptr)
+    return;
+  uint32_t raw;
+  if (!this->read_register_(BL0906_TEMPERATURE, raw))
+    return;
+  const int32_t signed_raw = sign_extend_24_(raw);
+  const float temperature = (static_cast<float>(signed_raw) - 64.0f) * 12.5f / 59.0f - 40.0f;
+  if (temperature < -40.0f || temperature > 125.0f) {
+    ESP_LOGW(TAG, "Ignoring implausible BL0906 temperature %.1f C", temperature);
+    return;
+  }
+  this->temperature_sensor_->publish_state(temperature);
+}
+
+void BL0906SPI::set_waveform_channel(uint8_t channel) {
+  if (channel < BL0906_CHANNEL_COUNT)
+    this->waveform_channel_ = channel;
+}
+
+std::string BL0906SPI::format_waveform_(float period_ms, const std::array<double, 21> &values,
+                                       uint8_t decimals) const {
+  std::string output = str_sprintf("%.3f|", period_ms);
+  for (size_t index = 0; index < values.size(); index++) {
+    if (index != 0)
+      output.push_back(',');
+    if (decimals == 3)
+      output += str_sprintf("%.3f", values[index]);
+    else
+      output += str_sprintf("%.1f", values[index]);
+  }
+  return output;
+}
+
+void BL0906SPI::capture_waveform() {
+  if (this->waveform_voltage_sensor_ == nullptr || this->waveform_current_sensor_ == nullptr ||
+      this->waveform_power_sensor_ == nullptr || this->write_sequence_ < 4) {
+    ESP_LOGW(TAG, "Waveform capture is not configured or the sample buffer is not ready");
+    return;
+  }
+
+  struct Point {
+    uint32_t time_us;
+    double voltage;
+    double current;
+  };
+  std::array<Point, BL0906_WAVE_BUFFER_SIZE> points{};
+  size_t point_count = 0;
+  const uint64_t oldest = this->write_sequence_ > BL0906_WAVE_BUFFER_SIZE
+                              ? this->write_sequence_ - BL0906_WAVE_BUFFER_SIZE
+                              : 0;
+  const int32_t shift_us = static_cast<int32_t>(std::lround(
+      this->phase_offsets_deg_[this->waveform_channel_] * 1000000.0 / (360.0 * this->frequency_hz_)));
+  for (uint64_t sequence = oldest; sequence < this->write_sequence_ && point_count < points.size(); sequence++) {
+    const auto &sample = this->wave_buffer_[sequence % BL0906_WAVE_BUFFER_SIZE];
+    if (sample.sequence != sequence)
+      continue;
+    const uint32_t target_time = sample.current_time_us[this->waveform_channel_] + shift_us;
+    double shifted_voltage;
+    if (!this->interpolate_voltage_(target_time, shifted_voltage))
+      continue;
+    points[point_count++] = {sample.current_time_us[this->waveform_channel_], shifted_voltage,
+                             static_cast<double>(sample.current[this->waveform_channel_])};
+  }
+
+  if (point_count < 4) {
+    ESP_LOGW(TAG, "No complete waveform is available in the sample buffer");
+    return;
+  }
+
+  std::array<size_t, 16> crossings{};
+  size_t crossing_count = 0;
+  for (size_t index = 1; index < point_count; index++) {
+    if (points[index - 1].voltage < 0.0 && points[index].voltage >= 0.0 &&
+        crossing_count < crossings.size())
+      crossings[crossing_count++] = index;
+  }
+  if (crossing_count < 2) {
+    ESP_LOGW(TAG, "No complete positive-going voltage cycle is available");
+    return;
+  }
+
+  auto crossing = [&](size_t right) {
+    const Point &left_point = points[right - 1];
+    const Point &right_point = points[right];
+    const double denominator = right_point.voltage - left_point.voltage;
+    const double ratio = denominator == 0.0 ? 0.0 : -left_point.voltage / denominator;
+    Point result;
+    result.time_us = left_point.time_us + static_cast<uint32_t>(
+        ratio * static_cast<double>(right_point.time_us - left_point.time_us));
+    result.voltage = 0.0;
+    result.current = left_point.current + ratio * (right_point.current - left_point.current);
+    return result;
+  };
+
+  // API/Wi-Fi work can occasionally delay one sample. Walk backwards over
+  // all available cycles so a damaged newest cycle does not make the capture
+  // button fail when an older complete cycle is still in the ring buffer.
+  size_t previous_crossing = 0;
+  size_t last_crossing = 0;
+  Point start{};
+  Point end{};
+  uint32_t period_us = 0;
+  bool found_period = false;
+  for (size_t candidate = crossing_count - 1; candidate > 0; candidate--) {
+    const size_t candidate_start = crossings[candidate - 1];
+    const size_t candidate_end = crossings[candidate];
+    const Point candidate_start_point = crossing(candidate_start);
+    const Point candidate_end_point = crossing(candidate_end);
+    const uint32_t candidate_period_us = candidate_end_point.time_us - candidate_start_point.time_us;
+    if (candidate_period_us < 12000 || candidate_period_us > 30000)
+      continue;
+    bool has_gap = false;
+    for (size_t index = candidate_start; index <= candidate_end; index++) {
+      if (index > candidate_start &&
+          points[index].time_us - points[index - 1].time_us > this->sample_interval_us_ * 3) {
+        has_gap = true;
+        break;
+      }
+    }
+    if (!has_gap) {
+      previous_crossing = candidate_start;
+      last_crossing = candidate_end;
+      start = candidate_start_point;
+      end = candidate_end_point;
+      period_us = candidate_period_us;
+      found_period = true;
+      break;
+    }
+  }
+  if (!found_period) {
+    ESP_LOGW(TAG, "No complete waveform without sample gaps is available");
+    return;
+  }
+
+  std::array<double, BL0906_WAVEFORM_POINTS> voltage{};
+  std::array<double, BL0906_WAVEFORM_POINTS> current{};
+  std::array<double, BL0906_WAVEFORM_POINTS> power{};
+  size_t segment = previous_crossing;
+  for (size_t output_index = 0; output_index < BL0906_WAVEFORM_POINTS; output_index++) {
+    const uint32_t target_elapsed = static_cast<uint32_t>(
+        static_cast<uint64_t>(period_us) * output_index / (BL0906_WAVEFORM_POINTS - 1));
+    const uint32_t target_time = start.time_us + target_elapsed;
+    double raw_voltage = 0.0;
+    double raw_current = start.current;
+    if (output_index == BL0906_WAVEFORM_POINTS - 1) {
+      raw_current = end.current;
+    } else if (output_index != 0) {
+      while (segment < last_crossing && time_after_or_equal_(target_time, points[segment].time_us))
+        segment++;
+      const Point &right_point = points[segment];
+      const Point &left_point = points[segment - 1];
+      const uint32_t span = right_point.time_us - left_point.time_us;
+      const double ratio = span == 0 ? 0.0 : static_cast<double>(target_time - left_point.time_us) / span;
+      raw_voltage = left_point.voltage + ratio * (right_point.voltage - left_point.voltage);
+      raw_current = left_point.current + ratio * (right_point.current - left_point.current);
+    }
+    voltage[output_index] = raw_voltage * this->voltage_calibration_;
+    current[output_index] = raw_current * this->current_calibration_[this->waveform_channel_];
+    // The waveform is deliberately the physical instantaneous product U * I.
+    // The independently calibrated active-power coefficient remains in use for
+    // the averaged power and energy entities and is not changed here.
+    power[output_index] = voltage[output_index] * current[output_index];
+  }
+
+  const float period_ms = period_us / 1000.0f;
+  const std::string voltage_state = this->format_waveform_(period_ms, voltage, 1);
+  const std::string current_state = this->format_waveform_(period_ms, current, 3);
+  const std::string power_state = this->format_waveform_(period_ms, power, 1);
+  if (voltage_state.size() > 255 || current_state.size() > 255 || power_state.size() > 255) {
+    ESP_LOGW(TAG, "Waveform payload exceeds the Home Assistant state limit");
+    return;
+  }
+  this->waveform_voltage_sensor_->publish_state(voltage_state);
+  this->waveform_current_sensor_->publish_state(current_state);
+  this->waveform_power_sensor_->publish_state(power_state);
+  ESP_LOGI(TAG, "Captured %.3f ms waveform for channel %u", period_ms,
+           static_cast<unsigned>(this->waveform_channel_ + 1));
+}
+
 void BL0906SPI::update() {
   this->read_frequency_();
+  this->read_temperature_();
 
   const uint32_t now_ms = millis();
   const uint32_t elapsed_ms = now_ms - this->publish_window_start_ms_;
@@ -424,10 +622,16 @@ void BL0906SPI::dump_config() {
                 this->phase_offsets_deg_[3], this->phase_offsets_deg_[4], this->phase_offsets_deg_[5]);
   LOG_SENSOR("  ", "Voltage", this->voltage_sensor_);
   LOG_SENSOR("  ", "Frequency", this->frequency_sensor_);
+  LOG_SENSOR("  ", "Temperature", this->temperature_sensor_);
   LOG_SENSOR("  ", "Total Power", this->total_power_sensor_);
   LOG_SENSOR("  ", "Total Energy", this->total_energy_sensor_);
   LOG_SENSOR("  ", "Total Apparent Power", this->total_apparent_power_sensor_);
   LOG_SENSOR("  ", "Total Power Factor", this->total_power_factor_sensor_);
+  LOG_SELECT("  ", "Waveform Channel", this->waveform_channel_select_);
+  LOG_BUTTON("  ", "Capture Waveform", this->waveform_capture_button_);
+  LOG_TEXT_SENSOR("  ", "Waveform Voltage", this->waveform_voltage_sensor_);
+  LOG_TEXT_SENSOR("  ", "Waveform Current", this->waveform_current_sensor_);
+  LOG_TEXT_SENSOR("  ", "Waveform Power", this->waveform_power_sensor_);
   for (size_t channel = 0; channel < BL0906_CHANNEL_COUNT; channel++) {
     ESP_LOGCONFIG(TAG, "  Channel %u:", static_cast<unsigned>(channel + 1));
     LOG_SENSOR("    ", "Current", this->current_sensors_[channel]);

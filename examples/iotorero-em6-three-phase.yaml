@@ -48,6 +48,9 @@ sensor:
       name: Voltage L1 Reference
     frequency:
       name: Mains Frequency
+    temperature:
+      name: BL0906 Temperature
+      entity_category: diagnostic
     total_power:
       name: Corrected Total Power
     total_energy:
@@ -65,6 +68,18 @@ sensor:
     raw_voltage_rms:
       name: Raw Voltage RMS
       entity_category: diagnostic
+    waveform:
+      channel_names: [Grid L1, Grid L2, Grid L3, Channel 4, Channel 5, Channel 6]
+      channel_select:
+        name: Waveform Channel
+      capture_button:
+        name: Capture Waveform
+      voltage:
+        name: Waveform Voltage
+      current:
+        name: Waveform Current
+      power:
+        name: Waveform Power
 
     channel_1:
       current: Grid L1 Current

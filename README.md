@@ -55,6 +55,31 @@ The driver can publish apparent power, power factor, reactive power magnitude,
 and phase angle for every channel from the same sampling window as current and
 active power. It can also publish total apparent power and total power factor.
 
+The optional `temperature` sensor reads the BL0906 internal temperature. The
+optional `waveform` block exposes a six-channel selector, an on-demand capture
+button and voltage/current/instantaneous-power text sensors. A capture contains
+the most recent complete positive-going voltage cycle as
+`period_ms|v1,v2,...`; 21 evenly spaced points keep every state below Home
+Assistant's 255-character limit. The endpoints are linearly interpolated zero
+crossings and power is the point-by-point physical product `U * I`.
+
+```yaml
+temperature:
+  name: BL0906 Temperature
+waveform:
+  channel_names: [Grid L1, Grid L2, Grid L3, Channel 4, Channel 5, Channel 6]
+  channel_select:
+    name: Waveform Channel
+  capture_button:
+    name: Capture Waveform
+  voltage:
+    name: Waveform Voltage
+  current:
+    name: Waveform Current
+  power:
+    name: Waveform Power
+```
+
 The default voltage/current/power conversion coefficients are the same as the
 stock ESPHome BL0906 component for Athom/IoTorero EM6 hardware. Use the
 per-channel calibration options when comparing against a reference meter.

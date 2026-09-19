@@ -2,9 +2,13 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
+#include "esphome/components/button/button.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/select/select.h"
 #include "esphome/components/spi/spi.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
@@ -25,6 +29,26 @@ struct BL0906WaveSample {
 
 struct BL0906EnergyRestoreState {
   std::array<float, BL0906_CHANNEL_COUNT> energy_kwh{};
+};
+
+class BL0906SPI;
+
+class BL0906WaveformChannelSelect : public select::Select {
+ public:
+  void set_parent(BL0906SPI *parent) { this->parent_ = parent; }
+
+ protected:
+  void control(size_t index) override;
+  BL0906SPI *parent_{nullptr};
+};
+
+class BL0906WaveformCaptureButton : public button::Button {
+ public:
+  void set_parent(BL0906SPI *parent) { this->parent_ = parent; }
+
+ protected:
+  void press_action() override;
+  BL0906SPI *parent_{nullptr};
 };
 
 class BL0906SPI : public PollingComponent,
@@ -51,6 +75,8 @@ class BL0906SPI : public PollingComponent,
   void set_power_calibration(uint8_t channel, float calibration) {
     this->power_calibration_[channel] = calibration;
   }
+  void set_waveform_channel(uint8_t channel);
+  void capture_waveform();
 
   void set_voltage_sensor(sensor::Sensor *sensor) { this->voltage_sensor_ = sensor; }
   void set_frequency_sensor(sensor::Sensor *sensor) { this->frequency_sensor_ = sensor; }
@@ -61,6 +87,16 @@ class BL0906SPI : public PollingComponent,
   void set_actual_sample_rate_sensor(sensor::Sensor *sensor) { this->actual_sample_rate_sensor_ = sensor; }
   void set_spi_errors_sensor(sensor::Sensor *sensor) { this->spi_errors_sensor_ = sensor; }
   void set_raw_voltage_rms_sensor(sensor::Sensor *sensor) { this->raw_voltage_rms_sensor_ = sensor; }
+  void set_temperature_sensor(sensor::Sensor *sensor) { this->temperature_sensor_ = sensor; }
+  void set_waveform_channel_select(BL0906WaveformChannelSelect *select) {
+    this->waveform_channel_select_ = select;
+  }
+  void set_waveform_capture_button(BL0906WaveformCaptureButton *button) {
+    this->waveform_capture_button_ = button;
+  }
+  void set_waveform_voltage_sensor(text_sensor::TextSensor *sensor) { this->waveform_voltage_sensor_ = sensor; }
+  void set_waveform_current_sensor(text_sensor::TextSensor *sensor) { this->waveform_current_sensor_ = sensor; }
+  void set_waveform_power_sensor(text_sensor::TextSensor *sensor) { this->waveform_power_sensor_ = sensor; }
 
   void set_current_sensor(uint8_t channel, sensor::Sensor *sensor) { this->current_sensors_[channel] = sensor; }
   void set_power_sensor(uint8_t channel, sensor::Sensor *sensor) { this->power_sensors_[channel] = sensor; }
@@ -92,7 +128,9 @@ class BL0906SPI : public PollingComponent,
   bool interpolate_voltage_(uint32_t target_time_us, double &voltage) const;
   void process_sample_(const BL0906WaveSample &sample);
   void read_frequency_();
+  void read_temperature_();
   void save_energy_();
+  std::string format_waveform_(float period_ms, const std::array<double, 21> &values, uint8_t decimals) const;
 
   static int32_t sign_extend_24_(uint32_t value);
   static bool time_after_or_equal_(uint32_t a, uint32_t b) { return static_cast<int32_t>(a - b) >= 0; }
@@ -152,6 +190,13 @@ class BL0906SPI : public PollingComponent,
   sensor::Sensor *actual_sample_rate_sensor_{nullptr};
   sensor::Sensor *spi_errors_sensor_{nullptr};
   sensor::Sensor *raw_voltage_rms_sensor_{nullptr};
+  sensor::Sensor *temperature_sensor_{nullptr};
+  BL0906WaveformChannelSelect *waveform_channel_select_{nullptr};
+  BL0906WaveformCaptureButton *waveform_capture_button_{nullptr};
+  text_sensor::TextSensor *waveform_voltage_sensor_{nullptr};
+  text_sensor::TextSensor *waveform_current_sensor_{nullptr};
+  text_sensor::TextSensor *waveform_power_sensor_{nullptr};
+  uint8_t waveform_channel_{0};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> current_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> power_sensors_{};
   std::array<sensor::Sensor *, BL0906_CHANNEL_COUNT> energy_sensors_{};

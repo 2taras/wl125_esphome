@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
-from esphome.components import sensor, spi
+from esphome.components import button, select, sensor, spi, text_sensor
 from esphome.const import (
     CONF_CURRENT,
     CONF_ENERGY,
@@ -9,11 +9,13 @@ from esphome.const import (
     CONF_ID,
     CONF_NAME,
     CONF_POWER,
+    CONF_TEMPERATURE,
     CONF_VOLTAGE,
     DEVICE_CLASS_CURRENT,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_FREQUENCY,
     DEVICE_CLASS_POWER,
+    DEVICE_CLASS_TEMPERATURE,
     DEVICE_CLASS_VOLTAGE,
     ICON_CURRENT_AC,
     ICON_POWER,
@@ -22,12 +24,13 @@ from esphome.const import (
     UNIT_AMPERE,
     UNIT_HERTZ,
     UNIT_KILOWATT_HOURS,
+    UNIT_CELSIUS,
     UNIT_VOLT,
     UNIT_WATT,
 )
 
 DEPENDENCIES = ["spi"]
-AUTO_LOAD = ["sensor"]
+AUTO_LOAD = ["button", "select", "sensor", "text_sensor"]
 
 CONF_SELECT_PIN = "select_pin"
 CONF_RESET_PIN = "reset_pin"
@@ -50,6 +53,10 @@ CONF_APPARENT_POWER = "apparent_power"
 CONF_POWER_FACTOR = "power_factor"
 CONF_REACTIVE_POWER = "reactive_power"
 CONF_PHASE_ANGLE = "phase_angle"
+CONF_WAVEFORM = "waveform"
+CONF_CHANNEL_NAMES = "channel_names"
+CONF_CHANNEL_SELECT = "channel_select"
+CONF_CAPTURE_BUTTON = "capture_button"
 
 # Defaults match the coefficients used by ESPHome's stock BL0906 component for
 # the Athom/IoTorero EM6 analogue front end.
@@ -60,6 +67,12 @@ DEFAULT_POWER_CALIBRATION = 1.4234677637430922e-09
 bl0906_spi_ns = cg.esphome_ns.namespace("bl0906_spi")
 BL0906SPI = bl0906_spi_ns.class_(
     "BL0906SPI", cg.PollingComponent, spi.SPIDevice
+)
+BL0906WaveformChannelSelect = bl0906_spi_ns.class_(
+    "BL0906WaveformChannelSelect", select.Select
+)
+BL0906WaveformCaptureButton = bl0906_spi_ns.class_(
+    "BL0906WaveformCaptureButton", button.Button
 )
 
 
@@ -165,6 +178,41 @@ def _phase_offsets(value):
     return values
 
 
+def _channel_names(value):
+    values = cv.ensure_list(cv.string_strict)(value)
+    if len(values) != 6:
+        raise cv.Invalid("waveform.channel_names must contain exactly 6 names")
+    if any(not name.strip() for name in values):
+        raise cv.Invalid("waveform channel names cannot be empty")
+    if len(set(values)) != len(values):
+        raise cv.Invalid("waveform channel names must be unique")
+    return values
+
+
+WAVEFORM_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_CHANNEL_NAMES): _channel_names,
+        cv.Required(CONF_CHANNEL_SELECT): select.select_schema(
+            BL0906WaveformChannelSelect,
+            icon="mdi:electric-switch",
+        ),
+        cv.Required(CONF_CAPTURE_BUTTON): button.button_schema(
+            BL0906WaveformCaptureButton,
+            icon="mdi:camera-waveform",
+        ),
+        cv.Required(CONF_VOLTAGE): text_sensor.text_sensor_schema(
+            icon="mdi:sine-wave"
+        ),
+        cv.Required(CONF_CURRENT): text_sensor.text_sensor_schema(
+            icon="mdi:current-ac"
+        ),
+        cv.Required(CONF_POWER): text_sensor.text_sensor_schema(
+            icon="mdi:flash"
+        ),
+    }
+)
+
+
 CONFIG_SCHEMA = (
     cv.Schema(
         {
@@ -195,6 +243,14 @@ CONFIG_SCHEMA = (
                 unit_of_measurement=UNIT_HERTZ,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
+            cv.Optional(CONF_TEMPERATURE): sensor.sensor_schema(
+                icon="mdi:thermometer",
+                accuracy_decimals=1,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                unit_of_measurement=UNIT_CELSIUS,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_WAVEFORM): WAVEFORM_SCHEMA,
             cv.Optional(CONF_TOTAL_POWER): sensor.sensor_schema(
                 icon=ICON_POWER,
                 accuracy_decimals=1,
@@ -281,6 +337,7 @@ async def to_code(config):
 
     await _new_sensor(config, CONF_VOLTAGE, "set_voltage_sensor", var)
     await _new_sensor(config, CONF_FREQUENCY, "set_frequency_sensor", var)
+    await _new_sensor(config, CONF_TEMPERATURE, "set_temperature_sensor", var)
     await _new_sensor(config, CONF_TOTAL_POWER, "set_total_power_sensor", var)
     await _new_sensor(config, CONF_TOTAL_ENERGY, "set_total_energy_sensor", var)
     await _new_sensor(
@@ -296,6 +353,30 @@ async def to_code(config):
     await _new_sensor(
         config, CONF_RAW_VOLTAGE_RMS, "set_raw_voltage_rms_sensor", var
     )
+
+    if waveform_config := config.get(CONF_WAVEFORM):
+        channel_select = await select.new_select(
+            waveform_config[CONF_CHANNEL_SELECT],
+            options=waveform_config[CONF_CHANNEL_NAMES],
+        )
+        cg.add(channel_select.set_parent(var))
+        cg.add(var.set_waveform_channel_select(channel_select))
+
+        capture_button = await button.new_button(
+            waveform_config[CONF_CAPTURE_BUTTON]
+        )
+        cg.add(capture_button.set_parent(var))
+        cg.add(var.set_waveform_capture_button(capture_button))
+
+        for key, setter in (
+            (CONF_VOLTAGE, "set_waveform_voltage_sensor"),
+            (CONF_CURRENT, "set_waveform_current_sensor"),
+            (CONF_POWER, "set_waveform_power_sensor"),
+        ):
+            waveform_sensor = await text_sensor.new_text_sensor(
+                waveform_config[key]
+            )
+            cg.add(getattr(var, setter)(waveform_sensor))
 
     for index in range(6):
         channel = config.get(f"channel_{index + 1}")
