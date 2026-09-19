@@ -131,7 +131,7 @@ CONFIG_SCHEMA = (
                 cv.frequency, cv.Range(min=100, max=2000)
             ),
             cv.Optional(
-                CONF_PHASE_OFFSETS, default=[0.0, 120.0, -120.0, 0.0, 0.0, 0.0]
+                CONF_PHASE_OFFSETS, default=[0.0, -120.0, 120.0, 0.0, 0.0, 0.0]
             ): _phase_offsets,
             cv.Optional(CONF_RESTORE_ENERGY, default=True): cv.boolean,
             cv.Optional(
