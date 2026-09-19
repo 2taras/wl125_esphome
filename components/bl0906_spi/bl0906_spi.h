@@ -98,7 +98,7 @@ class BL0906SPI : public PollingComponent,
   uint64_t next_process_sequence_{0};
   bool processing_started_{false};
 
-  std::array<double, BL0906_CHANNEL_COUNT> phase_offsets_deg_{{0.0, -120.0, 120.0, 0.0, 0.0, 0.0}};
+  std::array<double, BL0906_CHANNEL_COUNT> phase_offsets_deg_{{120.0, 0.0, -120.0, 0.0, 0.0, 0.0}};
   float voltage_calibration_{8.334599604923265e-05f};
   std::array<float, BL0906_CHANNEL_COUNT> current_calibration_{{
       1.6706643822577576e-05f, 1.6706643822577576e-05f, 1.6706643822577576e-05f,
