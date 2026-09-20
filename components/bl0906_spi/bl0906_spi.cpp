@@ -445,9 +445,14 @@ void BL0906SPI::capture_waveform() {
     const uint32_t duration_us = candidate_end_point.time_us - candidate_start_point.time_us;
     if (duration_us < 12000 || duration_us > 30000)
       continue;
+    // A Wi-Fi/API service pass can occasionally delay the high-frequency loop
+    // by several milliseconds. Real timestamps make interpolation across that
+    // delay safe, but never bridge half a mains cycle: that could hide a lost
+    // zero crossing and turn an incomplete cycle into a plausible one.
+    const uint32_t maximum_gap_us = duration_us / 2;
     bool has_gap = false;
     for (size_t index = candidate_start + 1; index <= candidate_end; index++) {
-      if (points[index].time_us - points[index - 1].time_us > this->sample_interval_us_ * 3) {
+      if (points[index].time_us - points[index - 1].time_us > maximum_gap_us) {
         has_gap = true;
         break;
       }

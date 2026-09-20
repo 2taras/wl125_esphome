@@ -27,7 +27,7 @@ def capture_periods(
     voltage_calibration,
     current_calibration,
     max_periods=5,
-    max_gap_ms=3.0,
+    max_gap_fraction=0.5,
 ):
     crossings = positive_crossings(samples)
     if len(crossings) < 2:
@@ -36,8 +36,10 @@ def capture_periods(
     for start, end in zip(crossings[:-1], crossings[1:]):
         start_time, start_current, start_right = start
         end_time, end_current, end_right = end
-        if 12.0 <= end_time - start_time <= 30.0 and all(
-            samples[index][0] - samples[index - 1][0] <= max_gap_ms
+        period_ms = end_time - start_time
+        if 12.0 <= period_ms <= 30.0 and all(
+            samples[index][0] - samples[index - 1][0]
+            <= period_ms * max_gap_fraction
             for index in range(start_right + 1, end_right + 1)
         ):
             candidates.append((start, end))
@@ -91,13 +93,15 @@ def resample_period(samples, selected, voltage_calibration, current_calibration)
     return period, output
 
 
-def capture_period(samples, voltage_calibration, current_calibration, max_gap_ms=3.0):
+def capture_period(
+    samples, voltage_calibration, current_calibration, max_gap_fraction=0.5
+):
     captures = capture_periods(
         samples,
         voltage_calibration,
         current_calibration,
         max_periods=1,
-        max_gap_ms=max_gap_ms,
+        max_gap_fraction=max_gap_fraction,
     )
     return captures[-1] if captures else None
 
@@ -156,7 +160,7 @@ class WaveformCaptureTest(unittest.TestCase):
         samples = make_samples(50, 0)
         # Damage the latest cycle while leaving several earlier cycles intact.
         damaged = samples[:-8] + [
-            (time_ms + 5.0, voltage, current)
+            (time_ms + 12.0, voltage, current)
             for time_ms, voltage, current in samples[-8:]
         ]
         period, points = capture_period(damaged, 1.0, 1.0)
