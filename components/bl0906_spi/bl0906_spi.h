@@ -29,6 +29,20 @@ struct BL0906WaveSample {
   std::array<int32_t, BL0906_CHANNEL_COUNT> current{};
 };
 
+struct BL0906WaveformPoint {
+  uint32_t time_us{0};
+  double voltage{0.0};
+  double current{0.0};
+};
+
+struct BL0906WaveformPeriodWindow {
+  size_t first_sample{0};
+  size_t last_sample{0};
+  BL0906WaveformPoint start{};
+  BL0906WaveformPoint end{};
+  uint32_t duration_us{0};
+};
+
 struct BL0906EnergyRestoreState {
   std::array<float, BL0906_CHANNEL_COUNT> energy_kwh{};
 };
@@ -159,6 +173,11 @@ class BL0906SPI : public PollingComponent,
   float frequency_hz_{50.0f};
 
   std::array<BL0906WaveSample, BL0906_WAVE_BUFFER_SIZE> wave_buffer_{};
+  // Capture scratch space lives in static component storage rather than on
+  // ESPHome's loop-task stack. Five-period extraction otherwise approaches
+  // the default ESP32-C3 loop stack limit when the button is pressed.
+  std::array<BL0906WaveformPoint, BL0906_WAVE_BUFFER_SIZE> waveform_capture_points_{};
+  std::array<BL0906WaveformPeriodWindow, 15> waveform_period_candidates_{};
   uint64_t write_sequence_{0};
   uint64_t next_process_sequence_{0};
   bool processing_started_{false};

@@ -385,12 +385,7 @@ void BL0906SPI::capture_waveform() {
     return;
   }
 
-  struct Point {
-    uint32_t time_us;
-    double voltage;
-    double current;
-  };
-  std::array<Point, BL0906_WAVE_BUFFER_SIZE> points{};
+  auto &points = this->waveform_capture_points_;
   size_t point_count = 0;
   const uint64_t oldest = this->write_sequence_ > BL0906_WAVE_BUFFER_SIZE
                               ? this->write_sequence_ - BL0906_WAVE_BUFFER_SIZE
@@ -426,12 +421,12 @@ void BL0906SPI::capture_waveform() {
     return;
   }
 
-  auto crossing = [&](size_t right) -> Point {
-    const Point &left_point = points[right - 1];
-    const Point &right_point = points[right];
+  auto crossing = [&](size_t right) -> BL0906WaveformPoint {
+    const BL0906WaveformPoint &left_point = points[right - 1];
+    const BL0906WaveformPoint &right_point = points[right];
     const double denominator = right_point.voltage - left_point.voltage;
     const double ratio = denominator == 0.0 ? 0.0 : -left_point.voltage / denominator;
-    Point result;
+    BL0906WaveformPoint result;
     result.time_us = left_point.time_us + static_cast<uint32_t>(
         ratio * static_cast<double>(right_point.time_us - left_point.time_us));
     result.voltage = 0.0;
@@ -439,21 +434,14 @@ void BL0906SPI::capture_waveform() {
     return result;
   };
 
-  struct PeriodWindow {
-    size_t first_sample;
-    size_t last_sample;
-    Point start;
-    Point end;
-    uint32_t duration_us;
-  };
-  std::array<PeriodWindow, 15> candidates{};
+  auto &candidates = this->waveform_period_candidates_;
   std::array<bool, 15> candidate_valid{};
   const size_t candidate_count = crossing_count - 1;
   for (size_t candidate = 0; candidate < candidate_count; candidate++) {
     const size_t candidate_start = crossings[candidate];
     const size_t candidate_end = crossings[candidate + 1];
-    const Point candidate_start_point = crossing(candidate_start);
-    const Point candidate_end_point = crossing(candidate_end);
+    const BL0906WaveformPoint candidate_start_point = crossing(candidate_start);
+    const BL0906WaveformPoint candidate_end_point = crossing(candidate_end);
     const uint32_t duration_us = candidate_end_point.time_us - candidate_start_point.time_us;
     if (duration_us < 12000 || duration_us > 30000)
       continue;
@@ -498,7 +486,7 @@ void BL0906SPI::capture_waveform() {
   std::array<std::string, BL0906_WAVEFORM_MAX_PERIODS> current_states{};
   std::array<std::string, BL0906_WAVEFORM_MAX_PERIODS> power_states{};
   for (size_t period_index = 0; period_index < best_length; period_index++) {
-    const PeriodWindow &window = candidates[best_start + period_index];
+    const BL0906WaveformPeriodWindow &window = candidates[best_start + period_index];
     std::array<double, BL0906_WAVEFORM_POINTS> voltage{};
     std::array<double, BL0906_WAVEFORM_POINTS> current{};
     std::array<double, BL0906_WAVEFORM_POINTS> power{};
@@ -514,8 +502,8 @@ void BL0906SPI::capture_waveform() {
       } else if (output_index != 0) {
         while (segment < window.last_sample && time_after_or_equal_(target_time, points[segment].time_us))
           segment++;
-        const Point &right_point = points[segment];
-        const Point &left_point = points[segment - 1];
+        const BL0906WaveformPoint &right_point = points[segment];
+        const BL0906WaveformPoint &left_point = points[segment - 1];
         const uint32_t span = right_point.time_us - left_point.time_us;
         const double ratio = span == 0 ? 0.0 : static_cast<double>(target_time - left_point.time_us) / span;
         raw_voltage = left_point.voltage + ratio * (right_point.voltage - left_point.voltage);
