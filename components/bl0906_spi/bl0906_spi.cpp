@@ -220,10 +220,15 @@ bool BL0906SPI::interpolate_voltage_(uint32_t target_time_us, double &voltage) c
   if (this->write_sequence_ < 2)
     return false;
 
-  for (uint64_t sequence = oldest; sequence + 1 < this->write_sequence_; sequence++) {
-    const auto &left = this->wave_buffer_[sequence % BL0906_WAVE_BUFFER_SIZE];
-    const auto &right = this->wave_buffer_[(sequence + 1) % BL0906_WAVE_BUFFER_SIZE];
-    if (left.sequence != sequence || right.sequence != sequence + 1)
+  // Processing normally asks for a voltage only a few lookahead frames behind
+  // the newest sample. Search backwards so increasing the capture ring does
+  // not turn every real-time interpolation into a full-buffer scan.
+  for (uint64_t right_sequence = this->write_sequence_ - 1; right_sequence > oldest;
+       right_sequence--) {
+    const uint64_t left_sequence = right_sequence - 1;
+    const auto &left = this->wave_buffer_[left_sequence % BL0906_WAVE_BUFFER_SIZE];
+    const auto &right = this->wave_buffer_[right_sequence % BL0906_WAVE_BUFFER_SIZE];
+    if (left.sequence != left_sequence || right.sequence != right_sequence)
       continue;
     if (time_after_or_equal_(target_time_us, left.voltage_time_us) &&
         time_after_or_equal_(right.voltage_time_us, target_time_us)) {
