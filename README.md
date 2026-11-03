@@ -48,8 +48,21 @@ external_components:
 
 `phase_offsets` advances the sampled voltage waveform by the given angle. If
 L2/L3 power has the wrong sign, swap `+120` and `-120`; that depends on the
-actual phase order and CT direction. Corrected energy counts consumption only
-(negative/export power is not added) and is saved to flash every five minutes.
+actual phase order and CT direction. Corrected energy counts consumption only:
+signed instantaneous power is integrated over complete mains-period windows,
+and only positive net energy is added. Negative samples within a period are
+retained so reactive exchange is not counted as active import. Partial windows
+are discarded after sampling gaps of 100 ms or more; missing energy is not
+estimated. Energy uses double-precision RAM accumulators so millisecond
+increments remain measurable even after many kWh. Counters are saved to flash
+every five minutes using the unchanged legacy six-float layout and preference
+key; existing counters survive updates and remain readable by old firmware.
+An unfinished window (less than one mains period) is not persisted.
+
+Run host regressions, including actual driver energy processing and legacy
+save/restore, with `python3 -m unittest discover -s tests -p 'test_*.py' -v`
+(requires Python 3 and g++). Hardware SPI and voltage interpolation are replaced
+only at the test seam; these tests do not replace on-device calibration.
 
 The driver can publish apparent power, power factor, reactive power magnitude,
 and phase angle for every channel from the same sampling window as current and
