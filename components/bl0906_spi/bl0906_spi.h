@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "energy_window.h"
+
 #include "esphome/components/button/button.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/select/select.h"
@@ -201,7 +203,10 @@ class BL0906SPI : public PollingComponent,
   std::array<double, BL0906_CHANNEL_COUNT> previous_power_w_{};
   std::array<uint32_t, BL0906_CHANNEL_COUNT> previous_power_time_us_{};
   std::array<bool, BL0906_CHANNEL_COUNT> have_previous_power_{};
-  std::array<float, BL0906_CHANNEL_COUNT> energy_kwh_{};
+  // Millisecond increments must not be rounded away against accumulated kWh.
+  // Flash keeps its legacy float format; conversion happens only on load/save.
+  std::array<double, BL0906_CHANNEL_COUNT> energy_kwh_{};
+  std::array<BL0906EnergyWindow, BL0906_CHANNEL_COUNT> energy_windows_{};
 
   uint32_t acquired_since_publish_{0};
   uint32_t publish_window_start_ms_{0};
