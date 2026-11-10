@@ -108,7 +108,7 @@ void BL0906SPI::setup() {
       }
 
       if (loaded) {
-        this->energy_kwh_ = restored.energy_kwh;
+        std::copy(restored.energy_kwh.begin(), restored.energy_kwh.end(), this->energy_kwh_.begin());
         ESP_LOGI(TAG, "Restored corrected energy counters");
         // Store immediately under the stable key so later renames no longer
         // affect recovery.
@@ -311,12 +311,12 @@ void BL0906SPI::process_sample_(const BL0906WaveSample &sample) {
     if (this->have_previous_power_[channel]) {
       const uint32_t elapsed_us = sample.current_time_us[channel] - this->previous_power_time_us_[channel];
       if (elapsed_us > 0 && elapsed_us < 100000) {
-        // Consumption energy is total-increasing. Negative corrected power is
-        // treated as export and is not added to this counter.
-        const double previous = std::max(0.0, this->previous_power_w_[channel]);
-        const double current_power = std::max(0.0, power_w);
-        this->energy_kwh_[channel] +=
-            static_cast<float>((previous + current_power) * 0.5 * elapsed_us / 3.6e12);
+        const uint32_t period_us = static_cast<uint32_t>(std::lround(1000000.0 / this->frequency_hz_));
+        this->energy_kwh_[channel] += this->energy_windows_[channel].integrate(
+            this->previous_power_w_[channel], power_w, elapsed_us, period_us);
+      } else if (elapsed_us >= 100000) {
+        // Do not combine incomplete periods across an unobserved long gap.
+        this->energy_windows_[channel].reset();
       }
     }
     this->previous_power_w_[channel] = power_w;
@@ -643,7 +643,7 @@ void BL0906SPI::save_energy_() {
   if (!this->preference_ready_)
     return;
   BL0906EnergyRestoreState state;
-  state.energy_kwh = this->energy_kwh_;
+  std::copy(this->energy_kwh_.begin(), this->energy_kwh_.end(), state.energy_kwh.begin());
   this->energy_preference_.save(&state);
 }
 
