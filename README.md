@@ -2,6 +2,60 @@
 
 This repository contains ESPHome external components maintained by `2taras`.
 
+## Washer UART monitor
+
+`washer_uart` listens to the washer's main-board TX line and reports the program,
+cycle state, known stages, remaining time, delay, actual drum speed, door lock,
+drying setting and active options in Home Assistant. All entities are optional.
+The component marks numeric readings unknown at the next update if it has
+received no valid status for 5 seconds. The component defaults to 2-second
+updates, and the example uses a 10-second interval.
+
+The measurement scales are for the DEXP WD-F10715DMA/WBSI used for calibration:
+
+- `selected_temperature` is the setpoint in °C. The confirmed setpoints are 20,
+  30, 40, 60 and 90 °C. Cold and unknown settings have no numeric value.
+- `water_temperature` estimates °C during known water stages using an NTC
+  divider model with beta 3368 K and a fitted resistance ratio of 0.3244.
+  The fit uses three surface temperature measurements at codes 63–98. The
+  divider and thermistor parameters are modeling assumptions. Codes 35–62 and
+  99–174 extend the same curve and have greater uncertainty. Temperature during
+  drying and stages whose meaning is unknown is omitted.
+- `water_volume` estimates liters present relative to the start of a weighed
+  fill. Codes 2561–2430 cover the fill from 0 to 7.73 L. Lower codes through
+  2300 use a horizontal cylinder model. Codes above 2561 in the usual empty
+  range show zero relative to the calibration baseline. This is a level estimate
+  and does not include water absorbed in laundry or add up water use across fills.
+- `water_temperature_basis` and `water_volume_basis` show whether the reading
+  is within the measured range, extrapolated or unavailable. Raw codes are
+  available as diagnostics.
+
+See [the ESP32-S2 example](washer-uart.yaml). It uses `GPIO3`
+as RX at 9600 baud, 8N1. Connect the main-board TX signal through a suitable
+3.3 V level interface and use a shared signal ground on the isolated side of
+the appliance. For capture in both directions, connect the display TX line
+through the same type of interface to `GPIO5`. Both UARTs use RX pins only.
+The example uses encrypted OTA, which requires ESPHome 2026.9.0 or later.
+Set `wifi_ssid`, `wifi_password`, and `api_encryption_key` in
+`secrets.yaml` alongside the example. OTA uses the same key as the Home
+Assistant API.
+
+### Optional UART capture
+
+Capture is disabled by default. To enable it on an ESP32 with ESP-IDF and
+ESPHome 2026.4.5 or later, add `web_server_base: {}` at the top level and
+`capture: true` under the `washer_uart` sensor platform. To include display
+traffic, define a second RX-only UART at 9600 baud, 8N1 and set
+`display_uart_id` to its ID. The capture endpoint is available over HTTP
+without authentication.
+
+`GET /api/uart` returns up to 256 valid frames in arrival order. Each frame has
+`id`, `ms` since boot, channel `ch` (0 for main-board TX, 1 for display TX) and
+the frame body as `hex`. A collector can pass the returned `boot_id` and its
+last frame ID as `?boot_id=…&after=…`. If the boot ID changes, the endpoint
+returns the retained frames from the new boot. The buffer is in RAM and old
+frames are overwritten when it fills.
+
 ## BL0906 SPI waveform meter
 
 `bl0906_spi` is intended for six-channel BL0906 meters whose single voltage
