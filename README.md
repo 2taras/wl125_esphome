@@ -29,6 +29,9 @@ The measurement scales are for the DEXP WD-F10715DMA/WBSI used for calibration:
 - `water_temperature_basis` and `water_volume_basis` show whether the reading
   is within the measured range, extrapolated or unavailable. Raw codes are
   available as diagnostics.
+- `diagnostic_4` and `diagnostic_5` are raw values from diagnostic screens 4
+  and 5. They may relate to load balance and load estimation, respectively.
+  Their scales and units are unconfirmed.
 
 See [the ESP32-S2 example](washer-uart.yaml). It uses `GPIO3`
 as RX at 9600 baud, 8N1. Connect the main-board TX signal through a suitable

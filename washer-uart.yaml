@@ -72,6 +72,10 @@ sensor:
       name: Washer Temperature Code
     water_level_code:
       name: Washer Water Level Code
+    diagnostic_4:
+      name: Washer Diagnostic 4 Raw
+    diagnostic_5:
+      name: Washer Diagnostic 5 Raw
     program_code:
       name: Washer Program Code
     step_code:

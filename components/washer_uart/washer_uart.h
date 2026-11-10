@@ -28,6 +28,8 @@ class WasherUART : public PollingComponent, public uart::UARTDevice {
   void set_drum_speed(sensor::Sensor *value) { this->drum_speed_ = value; }
   void set_temperature_code(sensor::Sensor *value) { this->temperature_code_ = value; }
   void set_water_level_code(sensor::Sensor *value) { this->water_level_code_ = value; }
+  void set_diagnostic_4(sensor::Sensor *value) { this->diagnostic_4_ = value; }
+  void set_diagnostic_5(sensor::Sensor *value) { this->diagnostic_5_ = value; }
   void set_program_code(sensor::Sensor *value) { this->program_code_ = value; }
   void set_step_code(sensor::Sensor *value) { this->step_code_ = value; }
   void set_state_code(sensor::Sensor *value) { this->state_code_ = value; }
@@ -51,6 +53,8 @@ class WasherUART : public PollingComponent, public uart::UARTDevice {
   sensor::Sensor *drum_speed_{nullptr};
   sensor::Sensor *temperature_code_{nullptr};
   sensor::Sensor *water_level_code_{nullptr};
+  sensor::Sensor *diagnostic_4_{nullptr};
+  sensor::Sensor *diagnostic_5_{nullptr};
   sensor::Sensor *program_code_{nullptr};
   sensor::Sensor *step_code_{nullptr};
   sensor::Sensor *state_code_{nullptr};

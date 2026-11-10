@@ -55,7 +55,10 @@ SENSORS = {
         key: sensor.sensor_schema(
             accuracy_decimals=0, entity_category=ENTITY_CATEGORY_DIAGNOSTIC
         )
-        for key in ("temperature_code", "water_level_code", "program_code", "step_code", "state_code", "error_code")
+        for key in (
+            "temperature_code", "water_level_code", "diagnostic_4", "diagnostic_5",
+            "program_code", "step_code", "state_code", "error_code",
+        )
     },
 }
 

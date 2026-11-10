@@ -79,6 +79,8 @@ void WasherUART::update() {
   publish(this->drum_speed_, this->status_.drum_speed);
   publish(this->temperature_code_, this->status_.temperature_code);
   publish(this->water_level_code_, this->status_.water_level_code);
+  publish(this->diagnostic_4_, this->status_.diagnostic_4);
+  publish(this->diagnostic_5_, this->status_.diagnostic_5);
   publish(this->program_code_, this->status_.program_code);
   publish(this->step_code_, this->status_.step_code);
   publish(this->state_code_, this->status_.state_code);
