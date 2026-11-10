@@ -1,0 +1,84 @@
+esphome:
+  name: washer-uart
+  min_version: 2026.9.0
+
+esp32:
+  board: esp32-s2-saola-1
+  framework:
+    type: esp-idf
+
+logger:
+  baud_rate: 0
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption: {}
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [washer_uart]
+
+uart:
+  - id: washer_bus
+    rx_pin: GPIO3
+    baud_rate: 9600
+    rx_buffer_size: 1024
+
+sensor:
+  - platform: washer_uart
+    update_interval: 10s
+    uart_id: washer_bus
+    remaining_time:
+      name: Washer Remaining Time
+    delay_hours:
+      name: Washer Delay Hours
+    drum_speed:
+      name: Washer Drum Speed
+    water_temperature:
+      name: Estimated Water Temperature
+    selected_temperature:
+      name: Selected Water Temperature
+    water_volume:
+      name: Estimated Water Volume
+    program:
+      name: Washer Program
+    cycle_state:
+      name: Washer State
+    cycle_stage:
+      name: Washer Cycle Stage
+    drying_setting:
+      name: Washer Drying Setting
+    active_options:
+      name: Washer Active Options
+    door_lock:
+      name: Washer Door Lock
+    water_temperature_basis:
+      name: Water Temperature Basis
+    water_volume_basis:
+      name: Water Volume Basis
+    error_code:
+      name: Washer Error Code
+    temperature_code:
+      name: Washer Temperature Code
+    water_level_code:
+      name: Washer Water Level Code
+    diagnostic_4:
+      name: Washer Diagnostic 4 Raw
+    diagnostic_5:
+      name: Washer Diagnostic 5 Raw
+    program_code:
+      name: Washer Program Code
+    step_code:
+      name: Washer Step Code
+    state_code:
+      name: Washer State Code
