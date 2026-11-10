@@ -11,6 +11,11 @@ The component marks numeric readings unknown at the next update if it has
 received no valid status for 5 seconds. The component defaults to 2-second
 updates, and the example uses a 10-second interval.
 
+`remaining_time` reports minutes during a running or paused cycle.
+`display_time` keeps the original timer value in minutes in diagnostics.
+The water level, temperature and diagnostic screen 4 and 5 readings support
+long-term statistics in Home Assistant.
+
 The measurement scales are for the DEXP WD-F10715DMA/WBSI used for calibration:
 
 - `selected_temperature` is the setpoint in °C. The confirmed setpoints are 20,
@@ -23,9 +28,11 @@ The measurement scales are for the DEXP WD-F10715DMA/WBSI used for calibration:
   drying and stages whose meaning is unknown is omitted.
 - `water_volume` estimates liters present relative to the start of a weighed
   fill. Codes 2561–2430 cover the fill from 0 to 7.73 L. Lower codes through
-  2300 use a horizontal cylinder model. Codes above 2561 in the usual empty
-  range show zero relative to the calibration baseline. This is a level estimate
-  and does not include water absorbed in laundry or add up water use across fills.
+  2300 use a quadratic extrapolation fitted to the weighed points at codes
+  2500–2430 and anchored at 7.726 L at code 2430. Codes above 2561 in the usual
+  empty range show zero relative to the calibration baseline. This is a level
+  estimate and does not include water absorbed in laundry or add up water use
+  across fills.
 - `water_temperature_basis` and `water_volume_basis` show whether the reading
   is within the measured range, extrapolated or unavailable. Raw codes are
   available as diagnostics.

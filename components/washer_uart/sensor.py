@@ -28,6 +28,10 @@ SENSORS = {
     "remaining_time": sensor.sensor_schema(
         device_class=DEVICE_CLASS_DURATION, unit_of_measurement="min", accuracy_decimals=0
     ),
+    "display_time": sensor.sensor_schema(
+        device_class=DEVICE_CLASS_DURATION, unit_of_measurement="min", accuracy_decimals=0,
+        entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+    ),
     "delay_hours": sensor.sensor_schema(
         device_class=DEVICE_CLASS_DURATION, unit_of_measurement="h", accuracy_decimals=0
     ),
@@ -53,7 +57,9 @@ SENSORS = {
     ),
     **{
         key: sensor.sensor_schema(
-            accuracy_decimals=0, entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            accuracy_decimals=0,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
         )
         for key in (
             "temperature_code", "water_level_code", "diagnostic_4", "diagnostic_5",

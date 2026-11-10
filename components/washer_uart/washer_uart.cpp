@@ -1,6 +1,7 @@
 #include "washer_uart.h"
 
 #include <cmath>
+#include <cstdio>
 #include <new>
 
 #include "esphome/core/hal.h"
@@ -73,8 +74,9 @@ void WasherUART::update() {
   const auto temperature = water_temperature(this->status_);
   const auto volume = water_volume(this->status_.water_level_code);
   const bool off = this->status_.state_code == 0;
-  const bool finished = this->status_.state_code == 4;
-  publish(this->remaining_time_, off ? NAN : finished ? 0.0f : this->status_.remaining_time);
+  const bool in_cycle = this->status_.state_code == 2 || this->status_.state_code == 3;
+  publish(this->remaining_time_, in_cycle ? this->status_.remaining_time : NAN);
+  publish(this->display_time_, this->status_.remaining_time);
   publish(this->delay_hours_, off ? NAN : this->status_.delay_hours);
   publish(this->drum_speed_, this->status_.drum_speed);
   publish(this->temperature_code_, this->status_.temperature_code);
@@ -90,8 +92,17 @@ void WasherUART::update() {
   publish(this->water_volume_, volume.value);
   publish_text(this->program_, off ? "—" : program_name(this->status_.program_code));
   publish_text(this->cycle_state_, state_name(this->status_.state_code));
-  publish_text(this->cycle_stage_, cycle_stage(this->status_));
-  publish_text(this->door_lock_, this->status_.flags & 0x40 ? "Заперт" : "Разблокирован");
+  if (this->cycle_stage_ != nullptr) {
+    const char *stage = cycle_stage(this->status_);
+    char unknown_stage[48];
+    if (stage == nullptr) {
+      std::snprintf(unknown_stage, sizeof(unknown_stage), "Неизвестный шаг %u",
+                    static_cast<unsigned>(this->status_.step_code));
+      stage = unknown_stage;
+    }
+    publish_text(this->cycle_stage_, stage);
+  }
+  publish_text(this->door_lock_, this->status_.flags & 0x40 ? "Заблокирована" : "Разблокирована");
   publish_text(this->drying_setting_, off ? "—" : drying_name(this->status_.settings));
   if (this->active_options_ != nullptr)
     publish_text(this->active_options_, off ? "—" : active_options(this->status_).c_str());

@@ -40,6 +40,8 @@ sensor:
     uart_id: washer_bus
     remaining_time:
       name: Washer Remaining Time
+    display_time:
+      name: Washer Display Time
     delay_hours:
       name: Washer Delay Hours
     drum_speed:

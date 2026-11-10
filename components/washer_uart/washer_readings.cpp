@@ -34,13 +34,6 @@ bool known_water_stage(const WasherStatus &status) {
   }
 }
 
-float cylinder_segment(uint16_t code) {
-  // Height in units of radius. The fit uses weighed points from code 2500 to 2430.
-  const float height = 0.10409223f + (2500 - code) * 0.00298271f;
-  const float offset = 1.0f - height;
-  return (70.0f / 3.14159265f) * (std::acos(offset) - offset * std::sqrt(height * (2.0f - height)));
-}
-
 }  // namespace
 
 Reading water_temperature(const WasherStatus &status) {
@@ -65,9 +58,12 @@ Reading water_volume(uint16_t code) {
     return UNAVAILABLE;
   if (code >= VOLUME_POINTS[0].code)
     return {0.0f, ReadingBasis::BASELINE};
-  if (code < LAST_POINT.code)
-    return {LAST_POINT.liters + cylinder_segment(code) - cylinder_segment(LAST_POINT.code),
+  if (code < LAST_POINT.code) {
+    // Quadratic fit to weighed points from code 2500 to 2430, anchored at 2430.
+    const float code_delta = LAST_POINT.code - code;
+    return {LAST_POINT.liters + code_delta * (0.09822864f + 0.0002614931f * code_delta),
             ReadingBasis::EXTRAPOLATED};
+  }
 
   for (std::size_t i = 1; i < std::size(VOLUME_POINTS); i++) {
     const auto &upper_code = VOLUME_POINTS[i - 1];
@@ -147,34 +143,49 @@ const char *cycle_stage(const WasherStatus &status) {
     return "—";
 
   const uint8_t step = status.step_code;
+  if (step == 0) return "Запуск";
   switch (status.program_code) {
     case 0x01:
       if (step == 12) return "Налив";
       if (step == 13) return "Стирка";
       break;
+    case 0x03:
+      if (step == 1) return "Налив";
+      if (step == 2) return "Стирка";
+      if (step == 3 || step == 6 || step == 16) return "Слив";
+      if (step == 4 || step == 14) return "Налив для полоскания";
+      if (step == 5 || step == 15) return "Полоскание";
+      if (in_range(step, 17, 18)) return "Отжим";
+      if (step == 19) return "Завершение";
+      break;
     case 0x04:
       if (in_range(step, 15, 17)) return "Налив и замачивание";
       if (step == 18) return "Стирка";
       if (step == 20 || step == 25 || step == 55) return "Слив";
+      if (in_range(step, 21, 22) || in_range(step, 26, 27)) return "Промежуточный отжим";
       if (in_range(step, 23, 24) || in_range(step, 53, 54)) return "Полоскание";
-      if (step == 62) return "Отжим";
+      if (in_range(step, 56, 57) || in_range(step, 61, 62)) return "Отжим";
       if (step == 64) return "Сушка";
+      if (step == 65) return "Завершение сушки";
       break;
     case 0x08:
       if (in_range(step, 1, 9)) return "Налив";
-      if (step == 10) return "Очистка барабана";
+      if (in_range(step, 10, 14)) return "Очистка барабана";
       if (step == 15) return "Слив";
+      if (in_range(step, 16, 17)) return "Отжим";
+      if (step == 19) return "Завершение";
       break;
     case 0x35:
       if (step == 4) return "Налив";
       if (in_range(step, 9, 10)) return "Стирка";
-      if (step == 11 || step == 16) return "Слив";
-      if (step == 13 || step == 19) return "Промежуточный отжим";
+      if (step == 11 || step == 16 || step == 23) return "Слив";
+      if (in_range(step, 12, 13) || in_range(step, 18, 19)) return "Промежуточный отжим";
       if (in_range(step, 14, 15)) return "Первое полоскание";
-      if (step == 21) return "Второе полоскание";
+      if (in_range(step, 21, 22)) return "Второе полоскание";
+      if (in_range(step, 24, 25)) return "Отжим";
       break;
   }
-  return "Этап не определён";
+  return nullptr;
 }
 
 std::string active_options(const WasherStatus &status) {

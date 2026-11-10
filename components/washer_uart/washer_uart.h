@@ -24,6 +24,7 @@ class WasherUART : public PollingComponent, public uart::UARTDevice {
 #endif
 
   void set_remaining_time(sensor::Sensor *value) { this->remaining_time_ = value; }
+  void set_display_time(sensor::Sensor *value) { this->display_time_ = value; }
   void set_delay_hours(sensor::Sensor *value) { this->delay_hours_ = value; }
   void set_drum_speed(sensor::Sensor *value) { this->drum_speed_ = value; }
   void set_temperature_code(sensor::Sensor *value) { this->temperature_code_ = value; }
@@ -49,6 +50,7 @@ class WasherUART : public PollingComponent, public uart::UARTDevice {
 
  private:
   sensor::Sensor *remaining_time_{nullptr};
+  sensor::Sensor *display_time_{nullptr};
   sensor::Sensor *delay_hours_{nullptr};
   sensor::Sensor *drum_speed_{nullptr};
   sensor::Sensor *temperature_code_{nullptr};
