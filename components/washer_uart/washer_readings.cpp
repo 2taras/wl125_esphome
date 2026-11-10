@@ -146,7 +146,7 @@ const char *cycle_stage(const WasherStatus &status) {
   if (step == 0) return "Запуск";
   switch (status.program_code) {
     case 0x01:
-      if (step == 12) return "Налив";
+      if (step == 10 || step == 12) return "Налив";
       if (step == 13) return "Стирка";
       break;
     case 0x03:
@@ -159,12 +159,16 @@ const char *cycle_stage(const WasherStatus &status) {
       if (step == 19) return "Завершение";
       break;
     case 0x04:
+      if (step == 7) return "Сухая оценка загрузки и баланса";
       if (in_range(step, 15, 17)) return "Налив и замачивание";
       if (step == 18) return "Стирка";
       if (step == 20 || step == 25 || step == 55) return "Слив";
       if (in_range(step, 21, 22) || in_range(step, 26, 27)) return "Промежуточный отжим";
       if (in_range(step, 23, 24) || in_range(step, 53, 54)) return "Полоскание";
       if (in_range(step, 56, 57) || in_range(step, 61, 62)) return "Отжим";
+      if (step == 58) return "Перекладывание белья";
+      if (step == 60) return "Прогрев сушки";
+      if (step == 63) return "Переход к сушке";
       if (step == 64) return "Сушка";
       if (step == 65) return "Завершение сушки";
       break;
@@ -173,12 +177,19 @@ const char *cycle_stage(const WasherStatus &status) {
       if (in_range(step, 10, 14)) return "Очистка барабана";
       if (step == 15) return "Слив";
       if (in_range(step, 16, 17)) return "Отжим";
+      if (step == 18) return "Перекладывание белья";
       if (step == 19) return "Завершение";
+      break;
+    case 0x0A:
+      if (step == 2) return "После слива";
+      if (step == 3) return "Медленное вращение";
+      if (step == 5) return "Завершение";
       break;
     case 0x35:
       if (step == 4) return "Налив";
       if (in_range(step, 9, 10)) return "Стирка";
       if (step == 11 || step == 16 || step == 23) return "Слив";
+      if (step == 17) return "Балансировка перед отжимом";
       if (in_range(step, 12, 13) || in_range(step, 18, 19)) return "Промежуточный отжим";
       if (in_range(step, 14, 15)) return "Первое полоскание";
       if (in_range(step, 21, 22)) return "Второе полоскание";
