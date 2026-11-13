@@ -18,28 +18,11 @@ const Reading UNAVAILABLE{NAN, ReadingBasis::UNAVAILABLE};
 
 bool in_range(uint8_t value, uint8_t first, uint8_t last) { return value >= first && value <= last; }
 
-bool known_water_stage(const WasherStatus &status) {
-  const uint8_t step = status.step_code;
-  switch (status.program_code) {
-    case 0x01:  // Cotton
-      return step == 13;
-    case 0x04:  // Mix
-      return in_range(step, 15, 18) || in_range(step, 23, 24) || in_range(step, 53, 54);
-    case 0x08:  // Drum clean
-      return in_range(step, 9, 12) || step == 14;
-    case 0x35:  // Wash and dry
-      return in_range(step, 9, 10) || in_range(step, 14, 15) || step == 21;
-    default:
-      return false;
-  }
-}
-
 }  // namespace
 
 Reading water_temperature(const WasherStatus &status) {
   const auto code = status.temperature_code;
-  if ((status.state_code != 2 && status.state_code != 3) || status.water_level_code >= 2561 ||
-      !known_water_stage(status) || !in_range(code, 35, 174))
+  if (code == 0 || code == 255)
     return UNAVAILABLE;
 
   // Treat the code as a normalized divider reading. The ratio is fitted to

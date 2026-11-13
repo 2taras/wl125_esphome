@@ -47,7 +47,7 @@ sensor:
     drum_speed:
       name: Washer Drum Speed
     water_temperature:
-      name: Estimated Water Temperature
+      name: Temperature
     selected_temperature:
       name: Selected Water Temperature
     water_volume:

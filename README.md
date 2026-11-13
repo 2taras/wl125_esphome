@@ -20,12 +20,14 @@ The measurement scales are for the DEXP WD-F10715DMA/WBSI used for calibration:
 
 - `selected_temperature` is the setpoint in °C. The confirmed setpoints are 20,
   30, 40, 60 and 90 °C. Cold and unknown settings have no numeric value.
-- `water_temperature` estimates °C during known water stages using an NTC
-  divider model with beta 3368 K and a fitted resistance ratio of 0.3244.
-  The fit uses three surface temperature measurements at codes 63–98. The
-  divider and thermistor parameters are modeling assumptions. Codes 35–62 and
-  99–174 extend the same curve and have greater uncertainty. Temperature during
-  drying and stages whose meaning is unknown is omitted.
+- `water_temperature` reports the temperature calculated from the latest raw
+  code in every program, stage and cycle state, including fill, drying and idle.
+  It uses an NTC divider model with beta 3368 K and a fitted resistance ratio
+  of 0.3244. Codes 0 and 255 are invalid divider endpoints and have no reading.
+  The fit uses three surface temperature measurements at codes 63–98.
+  Other codes are marked as extrapolated. The divider and thermistor parameters
+  are modeling assumptions, and the physical temperature represented during
+  drying has not been independently verified.
 - `water_volume` estimates liters present relative to the start of a weighed
   fill. Codes 2561–2430 cover the fill from 0 to 7.73 L. Lower codes through
   2300 use a quadratic extrapolation fitted to the weighed points at codes
