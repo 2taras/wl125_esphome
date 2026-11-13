@@ -26,13 +26,13 @@ Reading water_temperature(const WasherStatus &status) {
     return UNAVAILABLE;
 
   // Treat the code as a normalized divider reading. The ratio is fitted to
-  // temperature measurements, with beta fixed, rather than measured on the board.
+  // five pyrometer measurements. The divider has not been measured on the board.
   constexpr float FULL_SCALE = 255.0f;
-  constexpr float BETA_K = 3368.0f;
-  constexpr float REFERENCE_TO_NTC_R25 = 0.3244f;
+  constexpr float BETA_K = 3497.55544f;
+  constexpr float REFERENCE_TO_NTC_R25 = 0.329804071f;
   const float resistance_ratio = REFERENCE_TO_NTC_R25 * (FULL_SCALE - code) / code;
   const float kelvin = 1.0f / (1.0f / 298.15f + std::log(resistance_ratio) / BETA_K);
-  const auto basis = in_range(code, 63, 98) ? ReadingBasis::CALIBRATED_NTC : ReadingBasis::EXTRAPOLATED;
+  const auto basis = in_range(code, 44, 136) ? ReadingBasis::CALIBRATED_NTC : ReadingBasis::EXTRAPOLATED;
   return {kelvin - 273.15f, basis};
 }
 
